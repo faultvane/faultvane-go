@@ -1,5 +1,9 @@
 # Faultvane
 
+[![CI](https://github.com/faultvane/faultvane-go/actions/workflows/ci.yml/badge.svg)](https://github.com/faultvane/faultvane-go/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/faultvane/faultvane-go.svg)](https://pkg.go.dev/github.com/faultvane/faultvane-go)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+
 Faultvane is a resilience library for Go services.
 Its first component is a distributed circuit breaker.
 Many application instances share one breaker state through Redis.

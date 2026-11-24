@@ -9,4 +9,6 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - Repository foundation.
+- Apache License 2.0.
+- Continuous integration with build, `go vet`, static analysis, and tests.
 - Requirements, architecture, design documents, decision records, and roadmap for the distributed circuit breaker.
