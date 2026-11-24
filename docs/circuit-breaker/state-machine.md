@@ -1,17 +1,17 @@
 # State machine
 
 This document is the specification of the breaker state machine.
-The Go code and the Redis scripts must agree with it.
+The Go code and each store adapter must agree with it.
 
 ## 1. States
 
-| State | Value in Redis | Behavior |
+| State | Number | Behavior |
 |---|---|---|
 | `CLOSED` | `0` | The breaker permits all calls and records the results. |
 | `OPEN` | `1` | The breaker rejects all calls. |
 | `HALF_OPEN` | `2` | The breaker permits only calls that hold a probe lease. |
 
-A breaker with no state in Redis is `CLOSED` with generation 0.
+A breaker with no state in the store is `CLOSED` with generation 0.
 
 ## 2. Transitions
 
@@ -27,7 +27,7 @@ stateDiagram-v2
 | ID | From | To | Trigger | Effects |
 |---|---|---|---|---|
 | T1 | `CLOSED` | `OPEN` | The shared window satisfies the failure condition. | Generation + 1. Record the transition time and the open duration. Delete the window. |
-| T2 | `OPEN` | `HALF_OPEN` | A call requests a probe, and the Redis time is at or after the transition time plus the open duration. | Generation + 1. Record the transition time. Delete all probe leases. Set probe successes to 0. |
+| T2 | `OPEN` | `HALF_OPEN` | A call requests a probe, and the store time is at or after the transition time plus the open duration. | Generation + 1. Record the transition time. Delete all probe leases. Set probe successes to 0. |
 | T3 | `HALF_OPEN` | `CLOSED` | The number of probe successes reaches the required number. | Generation + 1. Record the transition time. Delete the window and the probe leases. |
 | T4 | `HALF_OPEN` | `OPEN` | A probe with a valid lease reports a failure. | Generation + 1. Record the transition time and the open duration. Delete the probe leases. |
 
@@ -45,14 +45,14 @@ The generation is an integer. It starts at 0.
 | Rule | Statement |
 |---|---|
 | G1 | Each transition increases the generation by exactly 1. |
-| G2 | The generation changes only together with a transition, in one atomic script. |
+| G2 | The generation changes only together with a transition, in one atomic operation. |
 | G3 | Each permit carries the generation of the snapshot at the time of the permit decision. |
-| G4 | A result is valid only for the generation of its permit. Redis ignores results that carry another generation. |
+| G4 | A result is valid only for the generation of its permit. The store ignores results that carry another generation. |
 | G5 | A write that carries an old generation never changes the state. |
 
 Rule G4 prevents these errors:
 
-- A slow call that started before the circuit opened ends with success after the circuit opened. Its result carries the old generation. Redis ignores it.
+- A slow call that started before the circuit opened ends with success after the circuit opened. Its result carries the old generation. The store ignores it.
 - Failures from before a successful recovery arrive late. They carry an old generation. They cannot open the new `CLOSED` period.
 
 ## 4. Events
@@ -76,15 +76,16 @@ The instance then replaces its snapshot.
 
 ## 5. Results of concurrent events
 
-Redis runs each script atomically and in sequence.
+Each store adapter applies an operation atomically.
+The operations on one breaker run in sequence.
 For this reason, concurrent events have a total order.
 
 | Situation | Result |
 |---|---|
-| Two instances send reports that each reach the threshold. | The first report makes T1. The second report carries the old generation. Redis ignores it. The circuit opens one time. |
+| Two instances send reports that each reach the threshold. | The first report makes T1. The second report carries the old generation. The store ignores it. The circuit opens one time. |
 | 20 instances request a probe at the end of the open duration. | The first request makes T2 and gets a lease. The other requests find no free lease and get a rejection. |
 | A probe reports success, and at the same time its lease ends and a second instance gets the lease. | Each result is valid only with its own token. A result for a lease that ended is ignored. |
-| An instance reports `Report` counts while the state is `HALF_OPEN`. | Redis ignores the counts. Only probe results count in `HALF_OPEN`. |
+| An instance reports `Report` counts while the state is `HALF_OPEN`. | The store ignores the counts. Only probe results count in `HALF_OPEN`. |
 
 ## 6. Local mode
 

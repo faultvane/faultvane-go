@@ -1,6 +1,8 @@
-# Redis data model
+# Redis adapter
 
-This document defines the keys, the fields, the atomic scripts, and the TTL rules.
+This document describes the Redis adapter.
+The [store contract](README.md) defines the rules for all adapters.
+This document defines how the Redis adapter satisfies them: the keys, the fields, the atomic scripts, and the TTL rules.
 After version 1.0, this data model is a compatibility commitment.
 
 ## 1. Keys
@@ -76,17 +78,17 @@ Each script reads the time with `TIME` and returns the authoritative state after
 (state, generation, transitionTime, openDuration, redisTime)
 ```
 
-| Script | Arguments | Behavior |
-|---|---|---|
-| `report` | generation, calls, failures, slow calls, thresholds, window settings, open duration, fingerprint | Adds the counts to the shared window when the generation is equal and the state is `CLOSED`. Evaluates the failure condition. Makes transition T1 when the condition is true. |
-| `acquire_probe` | token, probe limit, lease duration | Makes transition T2 when the state is `OPEN` and the open duration ended. In `HALF_OPEN`, removes the leases that ended, then adds the token when the number of valid leases is below the limit. Returns if the lease is granted. |
-| `complete_probe` | generation, token, result, required successes, open duration | Does nothing when the generation is different or the token has no valid lease. Removes the lease. On failure, makes transition T4. On success, increments `ps` and makes transition T3 when `ps` reaches the required number. |
-| `restore` | snapshot of an authoritative state | Writes the snapshot only when the key does not exist or the stored generation is lower than the snapshot generation. Deletes the window and the leases when it writes. |
+| Script | Store operation | Arguments | Behavior |
+|---|---|---|---|
+| `report` | `Report` | generation, calls, failures, slow calls, thresholds, window settings, open duration, fingerprint | Adds the counts to the shared window when the generation is equal and the state is `CLOSED`. Evaluates the failure condition. Makes transition T1 when the condition is true. |
+| `acquire_probe` | `AcquireProbe` | token, probe limit, lease duration | Makes transition T2 when the state is `OPEN` and the open duration ended. In `HALF_OPEN`, removes the leases that ended, then adds the token when the number of valid leases is below the limit. Returns if the lease is granted. |
+| `complete_probe` | `CompleteProbe` | generation, token, result, required successes, open duration | Does nothing when the generation is different or the token has no valid lease. Removes the lease. On failure, makes transition T4. On success, increments `ps` and makes transition T3 when `ps` reaches the required number. |
+| `restore` | `Restore` | snapshot of an authoritative state | Writes the snapshot only when the key does not exist or the stored generation is lower than the snapshot generation. Deletes the window and the leases when it writes. |
 
-A snapshot refresh without counts is a plain read of the state hash together with `TIME`.
+The `Load` operation is a plain read of the state hash together with `TIME`.
 It needs no script.
 
-The [state machine](state-machine.md) defines the transitions T1 to T4.
+The [state machine](../circuit-breaker/state-machine.md) defines the transitions T1 to T4.
 
 ### Script loading
 

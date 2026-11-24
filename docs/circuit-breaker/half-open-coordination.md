@@ -6,12 +6,12 @@ The probe limit therefore applies to all instances together.
 
 ## 1. Probe lease
 
-A probe permit is a lease in Redis.
+A probe permit is a lease in the store.
 
 | Property | How the design gives it |
 |---|---|
-| Atomic acquisition | The `acquire_probe` script checks the limit and adds the lease in one atomic step. |
-| Expiry | Each lease has an end time in Redis time. The default lease duration is 30 seconds. |
+| Atomic acquisition | The `AcquireProbe` operation checks the limit and adds the lease in one atomic step. |
+| Expiry | Each lease has an end time in store time. The default lease duration is 30 seconds. |
 | No permanent owner | A lease of a dead instance ends at its end time. A later probe request removes it. |
 | No duplicate probes | A token identifies each lease. The number of valid leases never exceeds the probe limit. |
 
@@ -23,19 +23,19 @@ Use a timeout policy inside the breaker to limit the duration of a call.
 ```mermaid
 sequenceDiagram
     participant A as Instance A
-    participant R as Redis
+    participant R as Store
     participant B as Instance B
     participant D as Dependency
     Note over A,B: snapshots: OPEN, open duration ended
-    A->>R: acquire_probe(token a)
+    A->>R: AcquireProbe(token a)
     Note over R: T2: OPEN → HALF_OPEN<br/>lease a granted
     R-->>A: HALF_OPEN, granted
-    B->>R: acquire_probe(token b)
+    B->>R: AcquireProbe(token b)
     R-->>B: HALF_OPEN, not granted
     B-->>B: reject call: ErrProbeNotPermitted
     A->>D: probe call
     D-->>A: success
-    A->>R: complete_probe(token a, success)
+    A->>R: CompleteProbe(token a, success)
     Note over R: T3: HALF_OPEN → CLOSED
     R-->>A: CLOSED
     B->>R: refresh
@@ -48,21 +48,21 @@ A call needs a probe when the snapshot is `OPEN` with an ended open duration, or
 
 1. The instance tries to set its "probe attempt in progress" flag. If another goroutine holds the flag, the call gets `ErrProbeNotPermitted` immediately.
 2. If the last probe attempt was less than the probe attempt interval ago, the call gets `ErrProbeNotPermitted` immediately. The default interval is 100 ms.
-3. The instance calls `acquire_probe` with the store timeout.
-4. If Redis grants the lease, the call goes to the dependency as a probe.
-5. If Redis does not grant the lease, the call gets `ErrProbeNotPermitted`. The instance updates its snapshot from the response.
+3. The instance calls `AcquireProbe` with the store timeout.
+4. If the store grants the lease, the call goes to the dependency as a probe.
+5. If the store does not grant the lease, the call gets `ErrProbeNotPermitted`. The instance updates its snapshot from the response.
 6. If the store call fails, the call gets `ErrProbeNotPermitted`. The fault counts for the detection of a store fault.
 
-Steps 1 and 2 limit the Redis load.
-Each instance sends at most one `acquire_probe` in each probe attempt interval.
-All other calls get a local rejection without a Redis call.
+Steps 1 and 2 limit the store load.
+Each instance sends at most one `AcquireProbe` in each probe attempt interval.
+All other calls get a local rejection without a store call.
 
-This is the only place where the request path calls Redis.
+This is the only place where the request path calls the store.
 It does not happen in the `CLOSED` state.
 
 ## 4. Probe result
 
-After the probe call, the instance calls `complete_probe` with the generation, the token, and the result.
+After the probe call, the instance calls `CompleteProbe` with the generation, the token, and the result.
 
 | Result | Effect |
 |---|---|
@@ -70,7 +70,7 @@ After the probe call, the instance calls `complete_probe` with the generation, t
 | Success | The success counter increases. When it reaches `HalfOpenSuccessThreshold`, transition T3 to `CLOSED`. |
 | Ignored | The lease is removed. The state does not change. Another call can get a lease. |
 
-If `complete_probe` fails because of a store fault, the instance does not try again without a limit.
+If `CompleteProbe` fails because of a store fault, the instance does not try again without a limit.
 The lease ends at its end time.
 Then another call gets a lease and tests the dependency again.
 The result is a delay of the recovery, not an incorrect state.
@@ -87,7 +87,7 @@ One failure opens the circuit again.
 
 ## 6. Local mode
 
-An instance in local mode cannot get a lease from Redis.
+An instance in local mode cannot get a lease from the store.
 It then uses a local probe limit.
 Each instance in local mode permits `HalfOpenMaxProbes` probes of its own.
 With N instances in local mode, at most N times the limit can run.

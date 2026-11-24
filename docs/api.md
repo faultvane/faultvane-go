@@ -7,7 +7,6 @@ The API can change before version 1.0.
 
 ```go
 store := redisstore.New(redisClient, redisstore.WithNamespace("production"))
-defer store.Close(ctx)
 
 breaker, err := circuitbreaker.New("payment-service",
     circuitbreaker.WithStore(store),
@@ -15,12 +14,17 @@ breaker, err := circuitbreaker.New("payment-service",
     circuitbreaker.WithMinimumCalls(20),
     circuitbreaker.WithOpenDuration(30*time.Second),
 )
+if err != nil {
+    return err
+}
+defer breaker.Close(ctx)
 ```
 
 - `New` validates the configuration. An invalid configuration returns `faultvane.ErrInvalidConfig`.
 - A breaker without a store is a local breaker. It starts no goroutine.
-- The store owns the synchronizer goroutine. `store.Close` stops it.
-- The application supplies the Redis client. TLS, authentication, and connection timeouts are settings of that client.
+- A breaker with a store owns one synchronizer goroutine. `breaker.Close` stops it.
+- The store is an adapter. `redisstore` is the Redis adapter. [Stores](stores/README.md) lists the adapters and the contract for a new adapter.
+- The application supplies the client of the store, for example the Redis client or the `*sql.DB`. TLS, authentication, and connection timeouts are settings of that client.
 
 ## 2. Run a call
 
@@ -74,7 +78,7 @@ A permit is a small value. `Allow` does not allocate memory in the `CLOSED` stat
 | `faultvane.ErrRejected` | The parent of all rejections. Both errors above match it with `errors.Is`. | Match only |
 | `faultvane.ErrInvalidConfig` | The configuration is not valid. The message names the option. | `New` |
 | `timeout.ErrTimeout` | The timeout policy stopped the call. The breaker counts it as a failure. | Timeout policy |
-| `faultvane.ErrStoreUnavailable` | The store did not answer. | Store API and events only |
+| `faultvane.ErrStoreUnavailable` | The store did not answer. | Store adapters and events only |
 | The error of the dependency | The breaker returns it without a change. | `Execute`, `Do` |
 
 Rules:

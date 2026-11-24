@@ -19,7 +19,7 @@ The maintainers confirm the report, prepare a fix, and publish an advisory with 
 
 ## Security properties of the library
 
-- The library supports TLS and authentication for Redis through the Redis client that the application supplies.
-- The library does not store or read Redis credentials. The application owns the client configuration.
+- The library supports TLS and authentication for the shared store through the client that the application supplies, for example the Redis client or the database connection.
+- The library does not keep or read credentials of the store. The application owns the client configuration.
 - The library does not log credentials, request payloads, authorization tokens, or other sensitive configuration.
-- Redis keys contain only the namespace and the breaker name. Do not put personal data in these names.
+- The records in the store contain only the namespace and the breaker name. Do not put personal data in these names.

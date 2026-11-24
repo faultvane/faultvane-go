@@ -24,9 +24,15 @@
 |---|---|
 | [State machine](circuit-breaker/state-machine.md) | States, transitions, and generation rules. |
 | [Failure detection](circuit-breaker/failure-detection.md) | The sliding window and the shared aggregation. |
-| [Redis data model](circuit-breaker/redis-data-model.md) | Keys, fields, atomic scripts, and TTL. |
 | [Half-open coordination](circuit-breaker/half-open-coordination.md) | Probe permits and leases across instances. |
-| [Degraded mode](circuit-breaker/degraded-mode.md) | Behavior without Redis, reconciliation, and the consistency model. |
+| [Degraded mode](circuit-breaker/degraded-mode.md) | Behavior without the store, reconciliation, and the consistency model. |
+
+## Stores
+
+| Document | Content |
+|---|---|
+| [Stores](stores/README.md) | The store interface, the adapters, the contract, and the conformance tests. |
+| [Redis adapter](stores/redis.md) | Keys, fields, atomic scripts, and TTL. |
 
 ## Quality and operation
 
@@ -43,7 +49,9 @@
 | Dependency | The remote system that the application calls through a breaker. |
 | Instance | One running process of an application that uses the library. |
 | Namespace | The scope in which a breaker name is unique, for example `production`. Instances with the same namespace and breaker name share one state. |
-| Store | The component that keeps the shared state. The Redis store is the first implementation. |
+| Store | The system that keeps the shared state, for example Redis or a SQL database. |
+| Adapter | The implementation of the store interface for one type of store. |
+| Contract | The rules that each adapter must satisfy. |
 | Authoritative state | The breaker state in the store. It is the source of truth. |
 | Snapshot | The copy of the authoritative state in the memory of an instance. |
 | Generation | A number that increases by one at each state transition. |
