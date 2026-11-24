@@ -29,7 +29,7 @@ var (
 func newLimiter(t testing.TB, opts ...Option) (*Limiter, *faultvanetest.Clock) {
 	t.Helper()
 	clock := faultvanetest.NewClock(testStart)
-	l, err := New(append([]Option{WithClock(clock)}, opts...)...)
+	l, err := New(append([]Option{WithClock(clock), WithLogger(quiet)}, opts...)...)
 	if err != nil {
 		t.Fatal(err)
 	}

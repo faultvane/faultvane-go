@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/faultvane/faultvane-go"
@@ -18,6 +19,9 @@ type config struct {
 	backoffRatio        float64
 	overloadIf          func(error) bool
 	clock               faultvane.Clock
+	observer            Observer
+	observerSet         bool
+	logger              *slog.Logger
 }
 
 type Option func(*config)
@@ -34,6 +38,7 @@ func defaultConfig() config {
 		backoffRatio: 0.9,
 		overloadIf:   deadlineExceeded,
 		clock:        faultvane.SystemClock(),
+		logger:       slog.Default(),
 	}
 }
 
@@ -68,6 +73,17 @@ func WithClock(clock faultvane.Clock) Option {
 	return func(c *config) { c.clock = clock }
 }
 
+func WithObserver(observer Observer) Option {
+	return func(c *config) {
+		c.observer = observer
+		c.observerSet = true
+	}
+}
+
+func WithLogger(logger *slog.Logger) Option {
+	return func(c *config) { c.logger = logger }
+}
+
 func newConfig(opts []Option) (config, error) {
 	c := defaultConfig()
 	for _, opt := range opts {
@@ -96,6 +112,10 @@ func (c config) validate() error {
 		return invalid("OverloadIf", "must not be nil")
 	case c.clock == nil:
 		return invalid("Clock", "must not be nil")
+	case c.logger == nil:
+		return invalid("Logger", "must not be nil")
+	case c.observerSet && c.observer == nil:
+		return invalid("Observer", "must not be nil")
 	}
 	return nil
 }

@@ -15,6 +15,7 @@ type Limiter struct {
 	permitted atomic.Int64
 	rejected  atomic.Int64
 	decreases atomic.Int64
+	reduced   atomic.Bool
 }
 
 var _ faultvane.Policy = (*Limiter)(nil)
@@ -47,9 +48,9 @@ func (l *Limiter) Do(ctx context.Context, call func(context.Context) error) erro
 	switch {
 	case l.cfg.overloadIf(err) || l.cfg.isSlowSince(start):
 		l.decreases.Add(1)
-		l.adapt(l.cfg.decreased)
+		l.report(l.adapt(l.cfg.decreased))
 	case busy:
-		l.adapt(l.cfg.increased)
+		l.report(l.adapt(l.cfg.increased))
 	}
 	return err
 }
@@ -69,11 +70,19 @@ func (l *Limiter) acquire() (busy bool, err error) {
 	}
 }
 
-func (l *Limiter) adapt(change func(float64) float64) {
+func (l *Limiter) adapt(change func(float64) float64) (from, to int) {
 	for {
 		current := l.limit.Load()
-		if l.limit.CompareAndSwap(current, math.Float64bits(change(math.Float64frombits(current)))) {
-			return
+		limit := math.Float64frombits(current)
+		changed := change(limit)
+		if l.limit.CompareAndSwap(current, math.Float64bits(changed)) {
+			return int(limit), int(changed)
 		}
+	}
+}
+
+func (l *Limiter) report(from, to int) {
+	if from != to {
+		l.emit(Event{Kind: LimitChanged, From: from, To: to})
 	}
 }

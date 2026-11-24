@@ -62,7 +62,7 @@ func manualSync(c *config) { c.manualSync = true }
 
 func (f *sharedFixture) limiter(opts ...Option) *Limiter {
 	f.t.Helper()
-	base := []Option{WithClock(f.clock), WithRate(100), WithBurst(50), WithStore(f.store), WithName(sharedName), manualSync}
+	base := []Option{WithClock(f.clock), WithRate(100), WithBurst(50), WithStore(f.store), WithName(sharedName), WithLogger(quiet), manualSync}
 	limiter, err := New(append(base, opts...)...)
 	if err != nil {
 		f.t.Fatal(err)
@@ -441,7 +441,7 @@ func TestLocalMode(t *testing.T) {
 			return Grant{}, ctx.Err()
 		})
 		clock := faultvanetest.NewClock(testStart)
-		limiter, err := New(WithClock(clock), WithStore(store), WithName(sharedName), manualSync,
+		limiter, err := New(WithClock(clock), WithStore(store), WithName(sharedName), manualSync, WithLogger(quiet),
 			WithStoreTimeout(time.Millisecond), WithSyncInterval(2*time.Millisecond), WithBurst(5))
 		if err != nil {
 			t.Fatal(err)
@@ -512,7 +512,7 @@ func TestLocalMode(t *testing.T) {
 func TestLifecycle(t *testing.T) {
 	background := func(t *testing.T, store Store) *Limiter {
 		t.Helper()
-		limiter, err := New(WithStore(store), WithName(sharedName), WithRate(1000), WithBurst(100),
+		limiter, err := New(WithStore(store), WithName(sharedName), WithRate(1000), WithBurst(100), WithLogger(quiet),
 			WithSyncInterval(2*time.Millisecond), WithStoreTimeout(time.Millisecond))
 		if err != nil {
 			t.Fatal(err)

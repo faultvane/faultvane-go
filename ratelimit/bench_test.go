@@ -64,7 +64,7 @@ func BenchmarkAllowPermittedParallel(b *testing.B) {
 
 func benchmarkSharedLimiter(b *testing.B) *Limiter {
 	b.Helper()
-	limiter := benchmarkLimiter(b, WithRate(maxRate), WithStore(NewMemoryStore(faultvane.SystemClock())), WithName("benchmark"))
+	limiter := benchmarkLimiter(b, WithRate(maxRate), WithStore(NewMemoryStore(faultvane.SystemClock())), WithName("benchmark"), WithLogger(quiet))
 	b.Cleanup(func() { _ = limiter.Close(context.Background()) })
 	return limiter
 }

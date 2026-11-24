@@ -38,6 +38,7 @@ type shared struct {
 	faults      int
 	storeErrors int64
 	seen        int64
+	reported    Mode
 }
 
 func (l *Limiter) start(cfg config) {
@@ -93,6 +94,7 @@ func (l *Limiter) synchronize(minimum int64) {
 	defer cancel()
 	grant, err := s.cfg.store.Acquire(ctx, s.cfg.name, l.demand(minimum))
 	now := l.clock.Now()
+	defer l.report(err)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if err != nil {
@@ -138,6 +140,7 @@ func (l *Limiter) Close(ctx context.Context) error {
 		return ctx.Err()
 	}
 	now := l.clock.Now()
+	defer l.report(nil)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.enterLocal(now)

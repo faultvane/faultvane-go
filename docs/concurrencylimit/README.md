@@ -31,6 +31,16 @@ func (l *Limiter) InFlight() int
 func (l *Limiter) Stats() Stats
 
 var ErrLimitExceeded error
+
+type Observer interface {
+    Observe(Event)
+}
+
+type Event struct {
+    Kind EventKind
+    From int
+    To   int
+}
 ```
 
 | Item | Behavior |
@@ -41,6 +51,7 @@ var ErrLimitExceeded error
 | `InFlight` | Returns the number of calls in progress. |
 | `Stats` | Returns the counts, the limit, and the calls in progress. |
 | `ErrLimitExceeded` | The rejection error. It matches `faultvane.ErrRejected`. |
+| `Observer`, `Event` | The interface and the data of the events. Section 5 describes them. |
 
 `*Limiter` implements `faultvane.Policy`.
 All methods are safe for concurrent use.
@@ -115,7 +126,7 @@ registration, err := faultvaneotel.RegisterConcurrencyLimitMetrics(meter, "payme
 Each metric also has the attribute `faultvane.policy.name`. Its value is the name that you give to the function. Use a small, fixed set of names.
 The metrics read `Stats` when the reader collects them. They add no work to a call.
 `registration.Unregister()` removes the metrics.
-The policy writes no logs, because it has no state transitions and no faults. It has no observer.
+The limiter also gives an event and writes logs when the limit changes. Section 5 describes them.
 
 ## 3. Options
 
@@ -128,6 +139,8 @@ The policy writes no logs, because it has no state transitions and no faults. It
 | `WithBackoffRatio(r)` | `0.9` | Above 0 and below 1 | The limiter multiplies the limit by this value after an overload signal. |
 | `WithOverloadIf(f)` | An error that matches `context.DeadlineExceeded` | Not nil | The function that tells if the error of a call is an overload signal. It also receives `nil`. |
 | `WithClock(c)` | `faultvane.SystemClock()` | Not nil | The clock that measures the latency. Tests use a fake clock. |
+| `WithObserver(o)` | No observer | Not nil | The receiver of the events. Section 5 describes the events. |
+| `WithLogger(l)` | `slog.Default()` | Not nil | The logger of the package `log/slog` that gets the log records. Section 5 describes the records. |
 
 When you change `MinLimit` or `MaxLimit`, make sure that `InitialLimit` stays in the range.
 For example, `WithMaxLimit(10)` alone is not valid, because the default `InitialLimit` is 20.
@@ -184,7 +197,90 @@ A rejection by the limiter does not change the limit.
 - The limiter starts no goroutine and has no `Close` method.
 - The limiter does not stop a call in progress. Use a timeout for that.
 
-## 5. Concurrency limiter or bulkhead
+## 5. Events and logs
+
+The state of the limiter is its limit.
+The limiter reports a change of the effective limit with an event.
+It writes a log record only when the limit reaches `MinLimit` and when it returns to `InitialLimit`.
+The limiter reports nothing for a call that does not change the effective limit.
+
+### Events
+
+```go
+type limitPrinter struct{}
+
+func (limitPrinter) Observe(event concurrencylimit.Event) {
+    fmt.Println(event.Kind, event.From, event.To)
+}
+```
+
+```go
+limiter, err := concurrencylimit.New(
+    concurrencylimit.WithObserver(limitPrinter{}),
+    concurrencylimit.WithLogger(slog.Default().With("limiter", "search")),
+)
+```
+
+The observer gets one event for each change of the effective limit.
+
+| Field of `Event` | Content |
+|---|---|
+| `Kind` | `LimitChanged`. The text of `Kind.String()` is `limit_changed`. |
+| `From` | The effective limit before the change |
+| `To` | The effective limit after the change |
+
+Rules:
+
+- A change of only the fraction of the limit gives no event. With a limit of 20, approximately 20 busy calls give one event.
+- A rejection, a call that is not busy, and an overload signal at `MinLimit` give no event.
+- The limiter calls the observer in the goroutine of the call that changed the limit. It calls the observer after the call returned and before `Do` returns. The call is in progress during that time. The observer must return quickly.
+- The observer must not run a call through the same limiter.
+- Concurrent calls can give their events in a different sequence than the changes. `From` and `To` of each event are correct for its change.
+- When the observer panics, the limiter recovers and writes an error log. `Do` returns the error of the call.
+- The limiter writes the log of an event before it calls the observer.
+
+### Logs
+
+| Event | Message | Level |
+|---|---|---|
+| The effective limit decreases to `MinLimit` | `concurrency limiter limit reached the minimum` | `WARN` |
+| The effective limit increases to `InitialLimit` after it reached `MinLimit` | `concurrency limiter limit returned to the initial limit` | `INFO` |
+| The observer panicked | `concurrency limiter observer panic` | `ERROR` |
+
+| Attribute | Content |
+|---|---|
+| `from` | The effective limit before the change. The first two records have it. |
+| `to` | The effective limit after the change. The first two records have it. |
+| `panic` | The value of the panic. Only the record for an observer panic has it. |
+
+Rules:
+
+- After a `WARN` record, the limiter writes no second `WARN` record until it wrote the `INFO` record.
+- After an `INFO` record, the limiter writes no second `INFO` record until it wrote a `WARN` record.
+- A limiter with `InitialLimit` equal to `MinLimit` writes none of the first two records.
+- A record contains no name. The limiter has no name. To add one, give a logger with an attribute, as the example shows.
+- A record contains only numbers of the limit. It contains no error of a call, no credentials, and no request payloads.
+
+### Number of records
+
+Decision: each change of the effective limit is an event, and only two changes are log records.
+
+The limit changes continuously under load. This is the normal operation of the AIMD rule.
+A log record for each change, or for each decrease, gives records in proportion to the number of calls.
+A record each time the limit reaches `MinLimit` and each time it leaves `MinLimit` has the same problem during an overload: one call that succeeds increases the limit, and the next overload signals decrease it to `MinLimit` again.
+
+The tests in `concurrencylimit/observe_test.go` measure these numbers with the default options:
+
+| Sequence of calls | Events | Changes to `MinLimit` | Log records |
+|---|---|---|---|
+| 1000 times: one call that succeeds, then three overload signals, with the limit at `MinLimit` at the start | 2000 | 1000 | 0 |
+| A decrease from 200 to 1, then an increase to 200 | 236 | 1 | 2 |
+
+For this reason, the two log records have a distance between them.
+To write the two records again, the limit must increase from `MinLimit` to `InitialLimit` and decrease to `MinLimit` again.
+With the default options, this needs 198 busy calls without an overload signal and then 22 overload signals.
+
+## 6. Concurrency limiter or bulkhead
 
 Both policies limit the calls in progress for one dependency.
 Use one of them for one dependency, not both.
@@ -199,7 +295,7 @@ Use one of them for one dependency, not both.
 
 The [bulkhead](../bulkhead/README.md) document describes the fixed policy.
 
-## 6. Interaction with the other policies
+## 7. Interaction with the other policies
 
 The [policy composition](../policy-composition.md) document gives the recommended order.
 The limiter is at position 3: inside the rate limiter, and outside the circuit breaker.
@@ -216,9 +312,9 @@ pipeline := faultvane.Combine(shedder, rateLimiter, limiter, breaker, retrier, t
 | Timeout | It is inside the limiter. When the timeout of the last attempt ends, the call returns an error that matches `context.DeadlineExceeded`. This is the default overload signal. |
 | Context deadline | When the deadline of the request ends during the call, the call usually returns `context.DeadlineExceeded`. This is also an overload signal by default. |
 
-## 7. Design
+## 8. Design
 
-The limiter has two atomic values for the decision, three atomic counters for `Stats`, and no lock.
+The limiter has two atomic values for the decision, three atomic counters for `Stats`, one atomic flag for the log records, and no lock.
 
 | Value | Content | Change |
 |---|---|---|
@@ -246,7 +342,7 @@ The limiter reads the clock only when `LatencyThreshold` is set.
 
 Examine the second decision again if a profile of a real service shows the limiter as a bottleneck.
 
-## 8. Performance
+## 9. Performance
 
 Measured with `go test -run '^$' -bench . -benchmem -count=3 ./concurrencylimit`.
 Machine: Apple M4, 10 cores, macOS. Go 1.27.3. Each value is the middle result of three runs.
@@ -263,7 +359,7 @@ The parallel benchmark runs an empty call, so all goroutines change the same cou
 This is the worst condition.
 A real call to a dependency takes much longer than the limiter.
 
-## 9. Limits
+## 10. Limits
 
 - The limit is local to one process. Instances of a service do not share it.
 - Each overload signal decreases the limit. When many calls in progress fail at the same time, the limit decreases one time for each of them. It can go to `MinLimit` quickly. Set `MinLimit` to the smallest number of concurrent calls that you always permit.
@@ -271,4 +367,6 @@ A real call to a dependency takes much longer than the limiter.
 - `LatencyThreshold` is a fixed value. The limiter does not learn the normal latency of the dependency.
 - The limiter has no queue. A caller does not wait for a free place.
 - A panic of the call gives no signal.
-- The limiter writes no logs and has no observer. Use `Stats` and the metrics.
+- The limiter writes no log record for a change of the limit between `MinLimit` and `InitialLimit`. Use the observer, `Stats`, or the metrics for these changes.
+- When the limit reached `MinLimit` and the dependency then serves fewer concurrent calls than `InitialLimit`, the limiter writes no `INFO` record and no second `WARN` record. Set `InitialLimit` to a value that the dependency serves in normal conditions.
+- The limiter has no name. An event and a log record do not identify the limiter. Use one observer for each limiter, and a logger with an attribute.

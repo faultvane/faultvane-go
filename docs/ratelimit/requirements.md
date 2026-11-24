@@ -123,7 +123,18 @@ With a store, the limiters of many processes share one bucket. Sections 8 to 12 
 |---|---|
 | RL-41 | A permitted call and a rejected call of a limiter with a store make no memory allocation in the limiter. |
 
-## 14. Out of scope
+## 14. Events and logs
+
+| ID | Requirement |
+|---|---|
+| RL-42 | The option `WithObserver` sets the observer of the events. The default is no observer. The option `WithLogger` sets the logger of the package `log/slog`. The default is `slog.Default()`. The values must not be nil. A limiter without a store ignores these options and gives no event and no log. |
+| RL-43 | The limiter gives a `ModeChanged` event for each mode change. The event contains the name of the limiter, the mode after the change, and the store error when a store fault is the cause. A limiter that starts in local mode because the first synchronization failed gives this event. A limiter that starts in distributed mode gives no event. `Close` of a limiter in distributed mode gives this event without an error. |
+| RL-44 | The limiter gives a `StoreFault` event with the store error for each failed synchronization in distributed mode and for a failed first synchronization. A failed synchronization in local mode gives no event and no log. It only increases the number of failed synchronizations in `Stats`. |
+| RL-45 | The limiter writes one log record for each event before it calls the observer. A change to local mode after a store fault has the level `WARN`. A different mode change has the level `INFO`. A store fault has the level `DEBUG`. A record contains only the name of the limiter, the mode, and the text of the store error. |
+| RL-46 | The limiter calls the observer outside its lock, in the goroutine of the synchronizer or of the caller of `New` or `Close`. An observer that does not return blocks no call. When the observer panics, the limiter recovers, writes a log record with the level `ERROR`, and continues. |
+| RL-47 | A call gives no event and no log record. A permitted call and a rejected call make no memory allocation in a limiter with an observer and a logger. |
+
+## 15. Out of scope
 
 - A call that waits for a token.
 - A call that needs more than one token.
