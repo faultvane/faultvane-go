@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -403,9 +402,7 @@ func (p *proxy) copy(to, from net.Conn) {
 			}
 		}
 		if err != nil {
-			if err != io.EOF {
-				_ = to.Close()
-			}
+			_ = to.Close()
 			_ = from.Close()
 			return
 		}
