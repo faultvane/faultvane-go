@@ -1,7 +1,13 @@
 version: 2
 updates:
   - package-ecosystem: gomod
-    directory: /
+    directories:
+      - /
+      - /store/redis
+      - /store/sql
+      - /store/mongodb
+      - /otel
+      - /examples
     schedule:
       interval: weekly
   - package-ecosystem: github-actions
