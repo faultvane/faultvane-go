@@ -2,14 +2,14 @@ package circuitbreaker
 
 import "testing"
 
-func TestRulesExceeded(t *testing.T) {
-	rate := rules{minimumCalls: 10, failureRate: 0.5}
-	count := rules{minimumCalls: 10, failureRate: 1, failureThreshold: 3}
-	slow := rules{minimumCalls: 10, failureRate: 1, slowCallRate: 0.5}
+func TestThresholdsExceeded(t *testing.T) {
+	rate := Thresholds{MinimumCalls: 10, FailureRate: 0.5}
+	count := Thresholds{MinimumCalls: 10, FailureRate: 1, FailureThreshold: 3}
+	slow := Thresholds{MinimumCalls: 10, FailureRate: 1, SlowCallRate: 0.5}
 
 	cases := []struct {
 		name                       string
-		rules                      rules
+		rules                      Thresholds
 		calls, failures, slowCalls int64
 		want                       bool
 	}{
@@ -31,8 +31,8 @@ func TestRulesExceeded(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := c.rules.exceeded(c.calls, c.failures, c.slowCalls); got != c.want {
-				t.Fatalf("exceeded(%d, %d, %d) = %v, want %v", c.calls, c.failures, c.slowCalls, got, c.want)
+			if got := c.rules.Exceeded(c.calls, c.failures, c.slowCalls); got != c.want {
+				t.Fatalf("Exceeded(%d, %d, %d) = %v, want %v", c.calls, c.failures, c.slowCalls, got, c.want)
 			}
 		})
 	}

@@ -6,8 +6,10 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"log/slog"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,6 +21,8 @@ import (
 )
 
 var errDependency = errors.New("dependency failed")
+
+var quiet = slog.New(slog.DiscardHandler)
 
 type dependency struct {
 	calls atomic.Int64
@@ -34,7 +38,7 @@ func (d *dependency) respond(err error) func(context.Context) error {
 func newTestBreaker(t *testing.T, opts ...Option) (*Breaker, *faultvanetest.Clock) {
 	t.Helper()
 	clock := faultvanetest.NewClock(testStart)
-	base := []Option{WithClock(clock), WithMinimumCalls(4), WithOpenDuration(testOpenDuration), WithProbeTimeout(testLease)}
+	base := []Option{WithClock(clock), WithLogger(quiet), WithMinimumCalls(4), WithOpenDuration(testOpenDuration), WithProbeTimeout(testLease)}
 	b, err := New("payment-service", append(base, opts...)...)
 	if err != nil {
 		t.Fatal(err)
@@ -92,7 +96,7 @@ func assertRejected(t *testing.T, b *Breaker, want error) {
 func generation(b *Breaker) uint64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.machine.generation
+	return b.record.Generation
 }
 
 func TestClosed(t *testing.T) {
@@ -329,17 +333,17 @@ func TestHalfOpen(t *testing.T) {
 
 	t.Run("SM-7 a probe request on a breaker that closed in the meantime gets a normal permit", func(t *testing.T) {
 		b, clock := newTestBreaker(t)
-		permit, err := b.acquireProbe(clock.Now())
+		permit, err := b.acquireLocalProbe(clock.Now())
 		if err != nil || permit.token != 0 || permit.view != b.current.Load() {
-			t.Fatalf("acquireProbe() = %+v, %v, want a normal permit", permit, err)
+			t.Fatalf("acquireLocalProbe() = %+v, %v, want a normal permit", permit, err)
 		}
 	})
 
 	t.Run("SM-7 a probe request on a breaker that opened again in the meantime is rejected", func(t *testing.T) {
 		b, clock := newTestBreaker(t)
 		openBreaker(t, b)
-		if _, err := b.acquireProbe(clock.Now()); err != ErrCircuitOpen {
-			t.Fatalf("acquireProbe() error = %v, want ErrCircuitOpen", err)
+		if _, err := b.acquireLocalProbe(clock.Now()); err != ErrCircuitOpen {
+			t.Fatalf("acquireLocalProbe() error = %v, want ErrCircuitOpen", err)
 		}
 		assertState(t, b, Open)
 	})
@@ -418,7 +422,7 @@ func TestSnapshot(t *testing.T) {
 		runTimes(t, b, 3, errDependency)
 		before := b.current.Load()
 		b.trip(99, clock.Now())
-		b.completeProbe(0, 1, Failure, clock.Now())
+		b.completeLocalProbe(0, 1, Failure, clock.Now())
 		if b.current.Load() != before {
 			t.Fatal("the snapshot changed")
 		}
@@ -813,8 +817,8 @@ func TestConcurrency(t *testing.T) {
 		b.mu.Lock()
 		defer b.mu.Unlock()
 		view := b.current.Load()
-		if view.state != b.machine.state || view.generation != b.machine.generation {
-			t.Fatalf("snapshot %v/%d differs from machine %v/%d", view.state, view.generation, b.machine.state, b.machine.generation)
+		if view.state != b.record.State || view.generation != b.record.Generation {
+			t.Fatalf("snapshot %v/%d differs from machine %v/%d", view.state, view.generation, b.record.State, b.record.Generation)
 		}
 	})
 }
@@ -831,12 +835,13 @@ func TestResources(t *testing.T) {
 		}
 	})
 
-	t.Run("API-4 TK-15 the breaker code contains no go statement", func(t *testing.T) {
+	t.Run("API-4 TK-15 the breaker code starts a goroutine only for the synchronizer", func(t *testing.T) {
 		entries, err := os.ReadDir(".")
 		if err != nil {
 			t.Fatal(err)
 		}
 		checked := 0
+		var found []string
 		for _, entry := range entries {
 			if !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
 				continue
@@ -847,14 +852,14 @@ func TestResources(t *testing.T) {
 			}
 			checked++
 			ast.Inspect(file, func(node ast.Node) bool {
-				if _, found := node.(*ast.GoStmt); found {
-					t.Errorf("%s contains a go statement", entry.Name())
+				if _, isGo := node.(*ast.GoStmt); isGo {
+					found = append(found, entry.Name())
 				}
 				return true
 			})
 		}
-		if checked == 0 {
-			t.Fatal("the test found no source file")
+		if checked == 0 || !slices.Equal(found, []string{"sync.go"}) {
+			t.Fatalf("checked %d files, go statements in %v, want one in sync.go", checked, found)
 		}
 	})
 
@@ -888,7 +893,7 @@ func TestResources(t *testing.T) {
 	})
 
 	t.Run("API-5 the breaker works with the system clock", func(t *testing.T) {
-		b, err := New("system-clock", WithMinimumCalls(1), WithOpenDuration(time.Hour))
+		b, err := New("system-clock", WithLogger(quiet), WithMinimumCalls(1), WithOpenDuration(time.Hour))
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -7,7 +7,7 @@ import (
 
 func benchmarkBreaker(b *testing.B, open bool) *Breaker {
 	b.Helper()
-	breaker, err := New("benchmark")
+	breaker, err := New("benchmark", WithLogger(quiet))
 	if err != nil {
 		b.Fatal(err)
 	}

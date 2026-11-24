@@ -1,0 +1,10 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6399:6379"
+  redis-cluster:
+    image: redis:7-alpine
+    command: ["redis-server", "--cluster-enabled", "yes"]
+    ports:
+      - "6398:6379"
