@@ -169,7 +169,6 @@ A network between the application and the database adds its round-trip time for 
 
 - A write operation is a transaction with a row lock. Concurrent operations on one breaker wait for the lock. The store timeout of the breaker limits this wait.
 - The request path does not call the store in the `CLOSED` state, so the latency of the database does not change the latency of a normal call. It changes the lowest practical sync interval. The project did not measure this interval. The validation requires that `SyncInterval` is longer than `StoreTimeout`.
-- A cleanup that runs between the insert of a new row and its first update deletes the row. The operation then returns a store fault. The breaker counts it as one store fault.
 - The tests run with PostgreSQL 17 and MySQL 8.4. The project has no test with other versions or with other databases.
 - The data loss handling is the same as for each adapter. When a row is lost, an instance calls `Restore` with its last authoritative snapshot. [Degraded mode](../circuit-breaker/degraded-mode.md) describes it.
 - The adapter has no metrics of its own. `faultvaneotel.InstrumentStore` measures the duration of each operation.

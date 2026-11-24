@@ -91,10 +91,10 @@ func New(db *sql.DB, dialect Dialect, opts ...Option) (*Store, error) {
 
 func (s *Store) build() queries {
 	now := "(EXTRACT(EPOCH FROM clock_timestamp()) * 1000000)::bigint"
-	insert := "INSERT INTO %[1]s (namespace, name, record, expires_at) VALUES (?, ?, '{}', 0) ON CONFLICT (namespace, name) DO NOTHING"
+	insert := "INSERT INTO %[1]s (namespace, name, record, expires_at) VALUES (?, ?, '{}', %[2]s + %[3]d) ON CONFLICT (namespace, name) DO NOTHING"
 	if s.dialect == MySQL {
 		now = "CAST(UNIX_TIMESTAMP(NOW(6)) * 1000000 AS SIGNED)"
-		insert = "INSERT IGNORE INTO %[1]s (namespace, name, record, expires_at) VALUES (?, ?, '{}', 0)"
+		insert = "INSERT IGNORE INTO %[1]s (namespace, name, record, expires_at) VALUES (?, ?, '{}', %[2]s + %[3]d)"
 	}
 	q := queries{
 		schema:  "CREATE TABLE IF NOT EXISTS %[1]s (namespace VARCHAR(64) NOT NULL, name VARCHAR(64) NOT NULL, record TEXT NOT NULL, expires_at BIGINT NOT NULL, PRIMARY KEY (namespace, name))",
@@ -105,7 +105,7 @@ func (s *Store) build() queries {
 		cleanup: "DELETE FROM %[1]s WHERE expires_at < %[2]s",
 	}
 	for _, query := range []*string{&q.schema, &q.insert, &q.lock, &q.update, &q.load, &q.cleanup} {
-		*query = s.placeholders(fmt.Sprintf(*query, s.table, now))
+		*query = s.placeholders(fmt.Sprintf(*query, s.table, now, restoreTTL.Microseconds()))
 	}
 	return q
 }

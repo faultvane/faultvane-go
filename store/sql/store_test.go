@@ -244,6 +244,27 @@ func TestData(t *testing.T) {
 		}
 	})
 
+	forEachDatabase(t, "TTL-2 a cleanup does not remove a row that an operation just created", func(t *testing.T, d database, db *sql.DB) {
+		store := newStore(t, d, db, WithTable(fmt.Sprintf("created_%d", time.Now().UnixNano())))
+		t.Cleanup(func() { _, _ = db.Exec("DROP TABLE " + store.table) })
+		if _, err := db.Exec(store.queries.insert, store.namespace, "a"); err != nil {
+			t.Fatal(err)
+		}
+		if removed, err := store.Cleanup(ctx); err != nil || removed != 0 {
+			t.Fatalf("Cleanup() = %d, %v, want 0 rows", removed, err)
+		}
+		var remaining time.Duration
+		query := "SELECT expires_at FROM " + store.table
+		var expires int64
+		if err := db.QueryRow(query).Scan(&expires); err != nil {
+			t.Fatal(err)
+		}
+		remaining = time.Until(time.UnixMicro(expires))
+		if remaining < 30*time.Minute || remaining > 90*time.Minute {
+			t.Fatalf("a new row expires in %v, want about 1h", remaining)
+		}
+	})
+
 	forEachDatabase(t, "RF-1 a record that is not valid is a store fault", func(t *testing.T, d database, db *sql.DB) {
 		store := newStore(t, d, db)
 		if _, err := store.Report(ctx, "a", report(1, time.Hour)); err != nil {
