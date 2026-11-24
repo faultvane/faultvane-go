@@ -359,6 +359,32 @@ func TestSharedState(t *testing.T) {
 		}
 	})
 
+	t.Run("GEN-1 FD-6 an instance that missed two transitions reports with the new generation", func(t *testing.T) {
+		f := newFleet(t, 2)
+		f.fail(1, 5)
+		f.sync(1)
+		f.clock.Advance(testOpenDuration)
+		runTimes(t, f.breakers[1], 1, nil)
+		f.assertStored(Closed, 3)
+		f.sync(0)
+		f.fail(0, 1)
+		f.sync(0)
+		if buckets := f.stored().Buckets; len(buckets) != 1 || buckets[0].Failures != 1 {
+			t.Fatalf("shared window = %+v, want one bucket with 1 failure", buckets)
+		}
+	})
+
+	t.Run("FD-6 a result of a call from before a synchronization without a transition counts", func(t *testing.T) {
+		f := newFleet(t, 1)
+		early, _ := f.breakers[0].Allow(context.Background())
+		f.sync()
+		early.Failure()
+		f.sync()
+		if buckets := f.stored().Buckets; len(buckets) != 1 || buckets[0].Failures != 1 {
+			t.Fatalf("shared window = %+v, want one bucket with 1 failure", buckets)
+		}
+	})
+
 	t.Run("FD-7 a failed report is not sent again", func(t *testing.T) {
 		f := newFleet(t, 1)
 		f.fail(0, 4)
