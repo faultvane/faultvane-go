@@ -45,7 +45,7 @@ A change that cannot pass a gate changes the code or the test, not the gate.
 | Long run | `.github/workflows/long-run.yml` | One hour of load with a check of the heap and the goroutines, each week. |
 | Benchmarks | `.github/workflows/benchmarks.yml` | The core benchmarks on a Linux runner, started by a person. |
 
-For version 0.1.0, a person ran all workflows on the release commit before the tags. No automation enforces this order.
+For each release, a person runs all workflows on the release commit. No automation enforces this order.
 
 ## 2. Coverage rule
 

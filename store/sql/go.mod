@@ -3,7 +3,7 @@ module github.com/faultvane/faultvane-go/store/sql
 go 1.25.0
 
 require (
-	github.com/faultvane/faultvane-go v0.1.0
+	github.com/faultvane/faultvane-go v0.2.0
 	github.com/go-sql-driver/mysql v1.10.2
 	github.com/jackc/pgx/v5 v5.13.0
 )
