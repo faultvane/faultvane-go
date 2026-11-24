@@ -139,7 +139,7 @@ Each log, except the log for an observer panic, has these attributes:
 | `to` | The state after |
 | `generation` | The generation after the event |
 | `mode` | The mode after the event: `distributed` or `local` |
-| `cause` | The text of the store error. Only a store fault and a change to local mode because of a fault have it. |
+| `cause` | The text of the store error. Only a store fault and a change to local mode after the fault threshold have it. |
 
 The log for an observer panic has the attributes `breaker` and `panic`.
 

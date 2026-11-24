@@ -4,7 +4,8 @@ The circuit breaker stops calls to a dependency that fails.
 It works as a local breaker in one process.
 With a shared store, all instances of a service share one circuit.
 
-Status: the local breaker is implemented. The shared store, local mode, and observability are planned.
+Status: implemented. The local breaker, the shared state through a store, local mode, reconciliation, and observability exist and have tests.
+Not implemented: the configuration fingerprint and the optional transition notifications. No release tag exists yet.
 
 | Document | Content |
 |---|---|
@@ -14,9 +15,10 @@ Status: the local breaker is implemented. The shared store, local mode, and obse
 | [Failure detection](failure-detection.md) | The sliding window and the shared aggregation. |
 | [Half-open coordination](half-open-coordination.md) | Probe permits and leases across instances. |
 | [Degraded mode](degraded-mode.md) | Behavior without the store, reconciliation, and the consistency model. |
-| [API](api.md) | The planned public Go API and the error model. |
+| [API](api.md) | The public Go API and the error model. |
 | [Configuration](configuration.md) | All options, their defaults, and the validation rules. |
 | [Observability](observability.md) | Metrics, logs, and traces. |
 | [Operations](operations.md) | Deployment, capacity, failure modes, and troubleshooting. |
 
-The shared state is in a store. [Stores](../stores/README.md) describes the store interface and the adapters.
+The shared state is in a store. [Stores](../stores/README.md) describes the store interface and the adapters for Redis, SQL databases, and MongoDB.
+[Benchmarks](../benchmarks.md) gives the measured cost of a call and the results of the system benchmark.
