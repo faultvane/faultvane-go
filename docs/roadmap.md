@@ -54,7 +54,7 @@ These criteria apply to each milestone from M1.
 |---|---|
 | All quality gates of [testing.md](testing.md) section 1 pass. | The active gates pass in continuous integration. The benchmark comparison is not active. |
 | The statement coverage is 98% or more for each module and 95% or more for each package (QA-1, QA-2). | Continuous integration enforces it for the core module, the three adapter modules, and the `otel` module. |
-| Each requirement that the milestone names has a test with its identifier (QA-5). | 278 of the 294 requirements are in `scripts/implemented-requirements.txt`, and each has a test. The other 16 are requirements about the process, the documentation, or performance targets: QA-1 to QA-7, QA-10 to QA-12, QA-14, SEC-2, TK-4, and TK-51 to TK-53. No test names them. |
+| Each requirement that the milestone names has a test with its identifier (QA-5). | 282 of the 298 requirements are in `scripts/implemented-requirements.txt`, and each has a test. The other 16 are requirements about the process, the documentation, or performance targets: QA-1 to QA-7, QA-10 to QA-12, QA-14, SEC-2, TK-4, and TK-51 to TK-53. No test names them. |
 | Each scenario that the design documents of the milestone describe has a test. | Not verified for each scenario. The tests of each milestone exist. |
 | The mutation score of the critical packages that the milestone changes is 90% or more (QA-9). | The mutation gate measures it each day for the seven policy packages. [Testing](testing.md) section 2 records the result. |
 
@@ -132,7 +132,7 @@ Differences from the plan:
 - The in-memory adapter is in the package `circuitbreaker`, not in `store/memory`. The conformance suite is in `circuitbreaker/storetest`, not in `store/storetest`.
 - The state machine is the exported type `Record`. See [ADR 0007](adr/0007-shared-record-for-go-adapters.md).
 - The breaker does not reject a low state TTL. It uses an effective value. See [configuration](circuit-breaker/configuration.md).
-- The configuration fingerprint is not implemented.
+- The configuration fingerprint came later. See [ADR 0008](adr/0008-configuration-fingerprint.md).
 
 ### M3: Probe coordination
 
@@ -323,7 +323,7 @@ Result:
 | Logs of the concurrency limiter | The concurrency limiter writes a log record only when the limit reaches the minimum and when it returns to the initial limit. If the dependency then serves fewer calls than the initial limit, a second decrease to the minimum gives no log record. The observer and the metrics show each change. |
 | Cost of the limit events | A call of the concurrency limiter that adapts the limit is about 1 ns slower, because the limiter compares the limit after each adaptation. |
 | Cost of the retry statistics | Each call of the retry policy writes one shared counter. With 10 parallel goroutines and an empty call, one call takes about 51 ns. Before the statistics it took 0.6 ns. A counter for each processor removes this cost but adds code. Examine it again if a profile of a real service shows the retry policy. |
-| Configuration fingerprint | Not implemented. The library does not detect different configurations between instances. |
+| Configuration fingerprint | Implemented as detection only. [ADR 0008](adr/0008-configuration-fingerprint.md) has the status `Proposed`; the owner must accept it. The classifier is not in the fingerprint. The condition can end and start again when one group of instances writes less than one time in 10 store responses of the other group. |
 | Transition notifications | Not implemented. The Redis adapter does not use Pub/Sub. The sync interval gives the propagation. |
 | Benchmarks | The results come from one Apple M4 machine with the stores in local containers, and from one GitHub Linux runner for the core benchmarks. No result comes from a Linux server that is typical for production. The store operations and the system benchmark have no result from Linux in the documents. |
 | Shared rate limit | Only the in-memory store and the Redis store exist. No test uses a Redis Cluster. The Docker scenarios do not include the shared rate limit. The instances do not get equal parts of the limit under overload. |
@@ -373,7 +373,7 @@ The row for the transition logic and the Go versions of the separate modules com
 | Risk | Effect | Mitigation |
 |---|---|---|
 | The shared window is less exact than a record of each call. | The circuit opens a short time late. | Early reports. The limits are documented and tested. |
-| Different configurations between instances. | The failure condition depends on the reporter. | None in the code. The configuration fingerprint is not implemented. The documentation tells the application to use one configuration. |
+| Different configurations between instances. | The failure condition depends on the reporter. | An instance detects a different configuration of the last writer and reports it with an event, a log record, a statistic, and a metric. The behavior of the breaker does not change. See [ADR 0008](adr/0008-configuration-fingerprint.md). |
 | An adapter contains a second implementation of the transitions. | Adapters behave differently. | The in-memory, SQL, and MongoDB adapters share the type `Record`. Only the Redis scripts are a second implementation. The conformance suite compares each adapter with the in-memory store. See [ADR 0007](adr/0007-shared-record-for-go-adapters.md). |
 | Tests with real time are not stable. | Slow or flaky continuous integration. | Fake clock in unit tests. Wait for conditions in integration tests. |
 | The coverage minimum of 98% causes tests without value. | High coverage with weak assertions. | Property tests, the traceability check, and the mutation gate measure the quality of the assertions. |
