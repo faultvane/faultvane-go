@@ -812,8 +812,8 @@ func TestObservability(t *testing.T) {
 	})
 
 	t.Run("OB-1 the names of modes and event kinds", func(t *testing.T) {
-		names := []string{Distributed.String(), Local.String(), StateChanged.String(), ModeChanged.String(), Reconciled.String(), StoreFault.String(), LocalModeExpired.String(), EventKind(99).String()}
-		want := []string{"distributed", "local", "state_changed", "mode_changed", "reconciled", "store_fault", "local_mode_expired", "unknown"}
+		names := []string{Distributed.String(), Local.String(), StateChanged.String(), ModeChanged.String(), Reconciled.String(), StoreFault.String(), LocalModeExpired.String(), ConfigMismatchChanged.String(), EventKind(99).String()}
+		want := []string{"distributed", "local", "state_changed", "mode_changed", "reconciled", "store_fault", "local_mode_expired", "config_mismatch_changed", "unknown"}
 		if !slices.Equal(names, want) {
 			t.Fatalf("names = %v, want %v", names, want)
 		}

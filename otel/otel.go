@@ -31,6 +31,7 @@ type instruments struct {
 	state           metric.Int64ObservableGauge
 	mode            metric.Int64ObservableGauge
 	expired         metric.Int64ObservableGauge
+	configMismatch  metric.Int64ObservableGauge
 	calls           metric.Int64ObservableCounter
 	slowCalls       metric.Int64ObservableCounter
 	rejected        metric.Int64ObservableCounter
@@ -71,6 +72,7 @@ func newInstruments(meter metric.Meter) (instruments, []metric.Observable, error
 	i.state = gauge("state", "1 for the current state of the circuit breaker, 0 for the other states")
 	i.mode = gauge("mode", "1 for the current mode of the circuit breaker, 0 for the other mode")
 	i.expired = gauge("local_mode_expired", "1 when local mode is longer than the maximum time")
+	i.configMismatch = gauge("config_mismatch", "1 when the last writer of the shared state has a different configuration")
 	i.calls = counter("calls", "Calls that the circuit breaker permitted, by result")
 	i.slowCalls = counter("slow_calls", "Calls that were slow")
 	i.rejected = counter("rejected_calls", "Calls that the circuit breaker rejected, by reason")
@@ -95,6 +97,7 @@ func (i instruments) observe(observer metric.Observer, breaker *circuitbreaker.B
 		observer.ObserveInt64(i.mode, flag(stats.Mode == mode), with(modeKey.String(mode.String())))
 	}
 	observer.ObserveInt64(i.expired, flag(stats.LocalModeExpired), with())
+	observer.ObserveInt64(i.configMismatch, flag(stats.ConfigMismatch), with())
 	observer.ObserveInt64(i.calls, stats.Successes, with(resultKey.String("success")))
 	observer.ObserveInt64(i.calls, stats.Failures, with(resultKey.String("failure")))
 	observer.ObserveInt64(i.calls, stats.Ignored, with(resultKey.String("ignored")))

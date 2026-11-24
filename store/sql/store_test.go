@@ -265,6 +265,32 @@ func TestData(t *testing.T) {
 		}
 	})
 
+	forEachDatabase(t, "DS-9 a row from before the fingerprint works and has no fingerprint", func(t *testing.T, d database, db *sql.DB) {
+		store := newStore(t, d, db)
+		insert := store.placeholders("INSERT INTO " + store.table + " (namespace, name, record, expires_at) VALUES (?, ?, ?, ?)")
+		if _, err := db.Exec(insert, store.namespace, "a", `{"State":0,"Generation":3,"TransitionAt":"0001-01-01T00:00:00Z","OpenDuration":0,"ProbeSuccesses":0,"Leases":null,"Buckets":null}`, time.Now().Add(time.Hour).UnixMicro()); err != nil {
+			t.Fatal(err)
+		}
+		old, err := store.Load(ctx, "a")
+		if err != nil || old.State != circuitbreaker.Closed || old.Generation != 3 || old.Fingerprint != "" {
+			t.Fatalf("Load() = %+v, %v, want closed generation 3 without a fingerprint", old, err)
+		}
+		next := report(5, time.Hour)
+		next.Generation, next.Fingerprint = 3, "v1:new"
+		opened, err := store.Report(ctx, "a", next)
+		if err != nil || opened.State != circuitbreaker.Open || opened.Generation != 4 || opened.Fingerprint != "" {
+			t.Fatalf("Report() = %+v, %v, want open generation 4 and no fingerprint before the report", opened, err)
+		}
+		if loaded, err := store.Load(ctx, "a"); err != nil || loaded.Fingerprint != "v1:new" {
+			t.Fatalf("Load() = %+v, %v, want the fingerprint v1:new", loaded, err)
+		}
+		var record string
+		query := store.placeholders("SELECT record FROM " + store.table + " WHERE namespace = ? AND name = ?")
+		if err := db.QueryRow(query, store.namespace, "a").Scan(&record); err != nil || !strings.Contains(record, `"Fingerprint":"v1:new"`) {
+			t.Fatalf("record = %s, %v, want the fingerprint in the JSON text", record, err)
+		}
+	})
+
 	forEachDatabase(t, "RF-1 a record that is not valid is a store fault", func(t *testing.T, d database, db *sql.DB) {
 		store := newStore(t, d, db)
 		if _, err := store.Report(ctx, "a", report(1, time.Hour)); err != nil {
@@ -412,6 +438,20 @@ func TestAcceptance(t *testing.T) {
 		eventually(t, "all instances are closed", all(breakers, circuitbreaker.Closed))
 		if snapshot, _ := store.Load(ctx, "dependency"); snapshot.Generation != 3 {
 			t.Fatalf("the database has generation %d, want 3", snapshot.Generation)
+		}
+	})
+
+	forEachDatabase(t, "FD-8 OB-6 an instance finds the different configuration of the last writer", func(t *testing.T, d database, db *sql.DB) {
+		store := newStore(t, d, db)
+		writer := newBreakers(t, store, 1, circuitbreaker.WithOpenDuration(time.Hour))[0]
+		reader := newBreakers(t, store, 1, circuitbreaker.WithOpenDuration(2*time.Hour))[0]
+		_ = writer.Do(ctx, fail)
+		eventually(t, "the reader finds the difference", func() bool { return reader.Stats().ConfigMismatch })
+		if snapshot, err := store.Load(ctx, "dependency"); err != nil || snapshot.Fingerprint != writer.ConfigFingerprint() || writer.Stats().ConfigMismatch {
+			t.Fatalf("the database has %+v, %v, the writer has %q with mismatch %v", snapshot, err, writer.ConfigFingerprint(), writer.Stats().ConfigMismatch)
+		}
+		if err := reader.Do(ctx, func(context.Context) error { return nil }); err != nil {
+			t.Fatalf("Do() = %v, want a permitted call during the difference", err)
 		}
 	})
 

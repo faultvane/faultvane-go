@@ -117,7 +117,7 @@ func (s *Store) attempt(ctx context.Context, name string, ttl time.Duration, app
 	if err != nil {
 		return circuitbreaker.Snapshot{}, false, err
 	}
-	record = apply(record, doc.Now)
+	record, snapshot := record.Apply(doc.Now, apply)
 	encoded, _ := json.Marshal(record)
 	result, err := s.collection.UpdateOne(ctx,
 		bson.D{{Key: "_id", Value: s.id(name)}, {Key: "version", Value: doc.Version}},
@@ -129,7 +129,7 @@ func (s *Store) attempt(ctx context.Context, name string, ttl time.Duration, app
 	if err != nil {
 		return circuitbreaker.Snapshot{}, false, err
 	}
-	return record.Snapshot(doc.Now), result.MatchedCount == 1, nil
+	return snapshot, result.MatchedCount == 1, nil
 }
 
 func (s *Store) update(ctx context.Context, operation, name string, ttl time.Duration, apply func(circuitbreaker.Record, time.Time) circuitbreaker.Record) (circuitbreaker.Snapshot, error) {

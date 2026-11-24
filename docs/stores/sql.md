@@ -78,8 +78,9 @@ CREATE TABLE IF NOT EXISTS faultvane_circuit_breakers (
 | `record` | The `circuitbreaker.Record` of the breaker as JSON text. |
 | `expires_at` | The time after which the cleanup can delete the row. It is the database time in microseconds since the Unix epoch. |
 
-The record contains the state, the generation, the transition time, the open duration, the number of probe successes, the leases, and the window buckets.
-The JSON field names are the names of the Go fields, for example `State`, `Generation`, `Leases`, and `Buckets`.
+The record contains the state, the generation, the transition time, the open duration, the number of probe successes, the leases, the window buckets, and the configuration fingerprint of the last writer.
+The JSON field names are the names of the Go fields, for example `State`, `Generation`, `Leases`, `Buckets`, and `Fingerprint`.
+A record without the field `Fingerprint` is valid. Its fingerprint is the empty text. A row from before the fingerprint needs no migration.
 A new row has the record `{}`. That is `CLOSED` with generation 0.
 The row has no schema version column.
 
@@ -89,7 +90,7 @@ The row has no schema version column.
 
 1. Start a transaction with the default isolation level of the database.
 2. Read the record and the database time with `SELECT ... FOR UPDATE`. This statement locks the row.
-3. Apply the event to the record with the method of `circuitbreaker.Record`. This step runs in the instance.
+3. Apply the event to the record with the method of `circuitbreaker.Record`, through `Record.Apply`. This step runs in the instance.
 4. Write the record and the new `expires_at` with `UPDATE`.
 5. Commit.
 
@@ -118,6 +119,7 @@ Each write operation writes the row and sets `expires_at`, also when the record 
 | C10 Cleanup | The column `expires_at` and a delete statement. See section 6. |
 | C11 Data loss is visible | A row that does not exist gives `CLOSED` with generation 0. |
 | C12 No side effects | The adapter starts no goroutine and has no lock in the process. The row lock is in the database and ends with the transaction. |
+| C13 Fingerprint | The field `Fingerprint` of the record. The method `Record.Apply` gives the response with the fingerprint from before the operation. |
 
 The adapter passes the conformance suite with PostgreSQL and with MySQL.
 

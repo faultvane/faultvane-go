@@ -22,6 +22,7 @@ type Snapshot struct {
 	TransitionAt time.Time
 	OpenDuration time.Duration
 	StoreTime    time.Time
+	Fingerprint  string
 }
 
 type Report struct {
@@ -34,6 +35,7 @@ type Report struct {
 	WindowBuckets int
 	OpenDuration  time.Duration
 	StateTTL      time.Duration
+	Fingerprint   string
 }
 
 type ProbeRequest struct {
@@ -41,6 +43,7 @@ type ProbeRequest struct {
 	Limit         int
 	LeaseDuration time.Duration
 	StateTTL      time.Duration
+	Fingerprint   string
 }
 
 type ProbeGrant struct {
@@ -55,6 +58,7 @@ type ProbeResult struct {
 	SuccessThreshold int
 	OpenDuration     time.Duration
 	StateTTL         time.Duration
+	Fingerprint      string
 }
 
 type MemoryStore struct {
@@ -73,10 +77,9 @@ func (s *MemoryStore) update(ctx context.Context, name string, change func(Recor
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	now := s.clock.Now()
-	record := change(s.records[name], now)
+	record, snapshot := s.records[name].Apply(s.clock.Now(), change)
 	s.records[name] = record
-	return record.Snapshot(now), nil
+	return snapshot, nil
 }
 
 func (s *MemoryStore) Load(ctx context.Context, name string) (Snapshot, error) {

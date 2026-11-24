@@ -23,13 +23,14 @@ type view struct {
 }
 
 type Breaker struct {
-	name     string
-	cfg      config
-	origin   time.Time
-	current  atomic.Pointer[view]
-	pending  pending
-	counters counters
-	probing  atomic.Bool
+	name        string
+	cfg         config
+	fingerprint string
+	origin      time.Time
+	current     atomic.Pointer[view]
+	pending     pending
+	counters    counters
+	probing     atomic.Bool
 
 	lastProbeAttempt time.Time
 
@@ -41,6 +42,8 @@ type Breaker struct {
 	faults     int
 	localSince time.Time
 	lastToken  uint64
+
+	responsesWithoutMismatch int
 
 	syncMu    sync.Mutex
 	wake      chan struct{}
@@ -56,7 +59,7 @@ func New(name string, opts ...Option) (*Breaker, error) {
 	if err != nil {
 		return nil, err
 	}
-	b := &Breaker{name: name, cfg: cfg, origin: cfg.clock.Now()}
+	b := &Breaker{name: name, cfg: cfg, fingerprint: cfg.fingerprint(), origin: cfg.clock.Now()}
 	if cfg.store == nil {
 		b.current.Store(b.localView(nil))
 		return b, nil
@@ -66,6 +69,8 @@ func New(name string, opts ...Option) (*Breaker, error) {
 }
 
 func (b *Breaker) Name() string { return b.name }
+
+func (b *Breaker) ConfigFingerprint() string { return b.fingerprint }
 
 func (b *Breaker) State() State { return b.current.Load().state }
 
@@ -188,6 +193,7 @@ func (b *Breaker) acquireSharedProbe(ctx context.Context, now time.Time) (Permit
 		Limit:         b.cfg.halfOpenMaxProbes,
 		LeaseDuration: b.cfg.probeTimeout,
 		StateTTL:      b.cfg.stateTTL,
+		Fingerprint:   b.fingerprint,
 	})
 	cancel()
 	if err != nil {
@@ -227,6 +233,7 @@ func (b *Breaker) completeSharedProbe(generation, token uint64, result Result) {
 		SuccessThreshold: b.cfg.halfOpenSuccessThreshold,
 		OpenDuration:     b.cfg.openDuration,
 		StateTTL:         b.cfg.stateTTL,
+		Fingerprint:      b.fingerprint,
 	})
 	cancel()
 	if err != nil {

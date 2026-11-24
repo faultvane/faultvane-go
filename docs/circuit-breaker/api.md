@@ -147,6 +147,7 @@ A classifier returns `circuitbreaker.Success`, `circuitbreaker.Failure`, or `cir
 | `breaker.State()` | `circuitbreaker.Closed`, `circuitbreaker.Open`, or `circuitbreaker.HalfOpen`, from the snapshot or the local state. |
 | `breaker.Mode()` | `circuitbreaker.Distributed` or `circuitbreaker.Local`. A breaker without a store is always `Local`. |
 | `breaker.Stats()` | A `circuitbreaker.Stats` value with the state, the mode, and the counters of this breaker. |
+| `breaker.ConfigFingerprint()` | The configuration fingerprint of this breaker, for example `v1:c0183f3821e11064`. [Failure detection](failure-detection.md) defines it. |
 
 `State` and `Mode` have a `String` method. The texts are `closed`, `open`, `half_open`, `distributed`, and `local`.
 
@@ -169,6 +170,7 @@ Do not use them to decide if a call is permitted. Use `Allow` for that.
 | `LocalModeEntries` | The number of changes to local mode. |
 | `Reconciliations` | The number of reconciliations with the store. |
 | `LocalModeExpired` | `true` while local mode is longer than the maximum time. |
+| `ConfigMismatch` | `true` from the first store response with a different configuration fingerprint until 10 store responses in sequence have no different fingerprint. |
 
 All counters start at 0 when the application creates the breaker. They only increase.
 [Observability](observability.md) describes how the OpenTelemetry module exports them.
@@ -185,19 +187,21 @@ type Observer interface {
 circuitbreaker.WithObserver(observer)
 ```
 
-The observer gets an `Event` for each state change, each change of mode, each reconciliation, each failed store operation, and the end of the local mode time limit.
+The observer gets an `Event` for each state change, each change of mode, each reconciliation, each failed store operation, the end of the local mode time limit, and the start and the end of a configuration difference.
 A failed health check in local mode gives no event.
 
 | Field of `Event` | Content |
 |---|---|
-| `Kind` | `StateChanged`, `ModeChanged`, `Reconciled`, `StoreFault`, or `LocalModeExpired` |
+| `Kind` | `StateChanged`, `ModeChanged`, `Reconciled`, `StoreFault`, `LocalModeExpired`, or `ConfigMismatchChanged` |
 | `Breaker` | The name of the breaker |
 | `From`, `To` | The state before and after |
 | `Generation` | The generation after the event |
 | `Mode` | The mode after the event |
 | `Err` | The cause, for a store fault and for a change to local mode. In other events it is `nil`. |
+| `ConfigMismatch` | For `ConfigMismatchChanged`: `true` when the difference starts, `false` when it ends. In other events it is `false`. |
 
 A `StoreFault` event sets only `Kind`, `Breaker`, `Mode`, and `Err`. The other fields have their zero values.
+In a `ConfigMismatchChanged` event, `From` and `To` are the state of the response of the store, and `Mode` is `Distributed`.
 
 Rules:
 

@@ -41,6 +41,7 @@ All metric names start with `faultvane.circuit_breaker.`.
 | `state` | Observable gauge | `faultvane.breaker.state` | `1` for the current state, `0` for the other states. The values are `closed`, `open`, and `half_open`. |
 | `mode` | Observable gauge | `faultvane.breaker.mode` | `1` for the current mode, `0` for the other mode. The values are `distributed` and `local`. |
 | `local_mode_expired` | Observable gauge | | `1` when local mode is longer than the maximum time. |
+| `config_mismatch` | Observable gauge | | `1` while a writer of the shared state has a different configuration. It goes back to `0` after 10 store responses in sequence without a different fingerprint. See [failure detection](failure-detection.md). |
 | `calls` | Observable counter | `result` | Calls that the breaker permitted. `result` is `success`, `failure`, or `ignored`. |
 | `slow_calls` | Observable counter | | Calls that were slow. |
 | `rejected_calls` | Observable counter | `faultvane.breaker.rejection_reason` | Calls that the breaker rejected. The reason is `open` or `probe_not_permitted`. |
@@ -53,7 +54,7 @@ All metric names start with `faultvane.circuit_breaker.`.
 
 An exporter can change these names. For example, a Prometheus exporter usually replaces the dots and adds a suffix to a counter.
 
-The library has no metric for a write that the store ignored and no metric for a configuration difference between instances.
+The library has no metric for a write that the store ignored.
 
 ### Attributes
 
@@ -113,6 +114,7 @@ An application with a different metrics system reads `Stats` at an interval and 
 | `local_mode_expired` is `1` | The store is down for longer than the maximum time. |
 | `transitions` increases quickly | The circuit flaps. Examine the thresholds. |
 | `store_errors` increases | The store or the network has a problem. |
+| `config_mismatch` is `1` on an instance after a deployment ended | Instances have different configurations for one breaker. Compare `ConfigFingerprint()` of the instances. |
 
 ## 3. Logs
 
@@ -128,6 +130,8 @@ The default logger is `slog.Default()`. `WithLogger` sets a different logger.
 | Reconciliation | `circuit breaker reconciled with the store` | `INFO` |
 | Store operation failed | `circuit breaker store operation failed` | `DEBUG` |
 | Local mode is longer than the maximum time | `circuit breaker local mode is longer than the maximum time` | `ERROR` |
+| A configuration difference starts | `circuit breaker configuration is different from the configuration of the last writer` | `WARN` |
+| A configuration difference ends | `circuit breaker configuration is equal to the configuration of the last writer again` | `INFO` |
 | The observer panicked | `circuit breaker observer panic` | `ERROR` |
 
 Each log, except the log for an observer panic, has these attributes:
@@ -140,12 +144,16 @@ Each log, except the log for an observer panic, has these attributes:
 | `generation` | The generation after the event |
 | `mode` | The mode after the event: `distributed` or `local` |
 | `cause` | The text of the store error. Only a store fault and a change to local mode after the fault threshold have it. |
+| `fingerprint` | The configuration fingerprint of this instance. Only the two logs for a configuration difference have it. |
+| `stored_fingerprint` | The fingerprint that the last response of the store contained. In the log for the end of a difference, it is the fingerprint of this instance or it is empty. Only the two logs for a configuration difference have it. |
 
 The log for an observer panic has the attributes `breaker` and `panic`.
 
 Rules:
 
 - An instance logs a state change one time, when its view of the state changes.
+- An instance logs a configuration difference when it starts and when it ends. It does not write this log at each synchronization. The difference ends after 10 store responses in sequence without a different fingerprint.
+- In the logs for a configuration difference, `from` and `to` show the state of the response.
 - A store fault outside local mode gives one `DEBUG` log. A failed health check in local mode gives no log. It only increases the counter of store errors.
 - A log for a failed store operation does not set `from`, `to`, and `generation`. They show `closed` and `0`.
 - The `cause` attribute contains the text of the error from the store adapter. It can contain the address of the store. It contains no data of an application call, because a store operation gets none.
@@ -190,6 +198,7 @@ The observer receives events, not single calls:
 | `Reconciled` | `reconciled` | A reconciliation with the store completed. |
 | `StoreFault` | `store_fault` | A store operation failed outside a health check of local mode. |
 | `LocalModeExpired` | `local_mode_expired` | Local mode is longer than the maximum time, or the local fallback is off. |
+| `ConfigMismatchChanged` | `config_mismatch_changed` | A configuration difference with the last writer of the shared state starts or ends. |
 
 [API](api.md) lists the fields of an event and the rules for an observer.
 The breaker writes the log of an event before it calls the observer.

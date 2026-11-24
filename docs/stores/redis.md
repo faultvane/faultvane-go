@@ -91,9 +91,11 @@ A script uses Lua numbers. A generation or a time keeps its exact value up to 2^
 | `ts` | Integer | Redis time of the last transition, in microseconds. |
 | `od` | Integer | Open duration of the current `OPEN` state, in microseconds. |
 | `ps` | Integer | Number of probe successes in the current `HALF_OPEN` state. |
+| `fp` | Text | Configuration fingerprint of the last writer. |
 
 A key that does not exist means `CLOSED` with generation 0.
-The hash has no field for a configuration fingerprint. That function is not implemented.
+A hash without the field `fp` is valid. Its fingerprint is the empty text. A hash that an older version of the scripts wrote has no field `fp`.
+The schema version stays `1`, because the new field changes no existing field.
 
 ## 5. Window hash
 
@@ -127,20 +129,21 @@ The file `common.lua` contains the functions that all scripts use. The adapter p
 Each script reads the time with `TIME` and returns the authoritative state after its work:
 
 ```text
-(state, generation, transitionTime, openDuration, redisTime, granted)
+(state, generation, transitionTime, openDuration, redisTime, granted, previousFingerprint)
 ```
 
 `granted` is `1` only when `acquire_probe` grants a lease.
+`previousFingerprint` is the value of the field `fp` before the script changed it.
 
 | Script | Store operation | Arguments | Behavior |
 |---|---|---|---|
 | `load` | `Load` | None | Reads the state hash. Changes nothing. |
-| `report` | `Report` | generation, calls, failures, slow calls, failure count threshold, minimum calls, failure rate, slow call rate, bucket duration, number of buckets, open duration, TTL | Does nothing when the generation is different or the state is not `CLOSED`. Deletes the old buckets. Adds the counts to the current bucket. Evaluates the failure condition. Makes transition T1 when the condition is true. |
-| `acquire_probe` | `AcquireProbe` | token, probe limit, lease duration, TTL | Makes transition T2 when the state is `OPEN` and the open duration ended. In `HALF_OPEN`, removes the leases that ended, then adds the token when the number of valid leases is below the limit. Returns if the lease is granted. |
-| `complete_probe` | `CompleteProbe` | generation, token, result, required successes, open duration, TTL | Does nothing when the state is not `HALF_OPEN`, the generation is different, or the token has no valid lease. Removes the lease. On failure, makes transition T4. On success, increments `ps` and makes transition T3 when `ps` reaches the required number. |
-| `restore` | `Restore` | state, generation, transition time, open duration, TTL | Writes the snapshot only when its generation is higher than the stored generation. A key that does not exist has generation 0. Deletes the window and the leases when it writes. |
+| `report` | `Report` | generation, calls, failures, slow calls, failure count threshold, minimum calls, failure rate, slow call rate, bucket duration, number of buckets, open duration, TTL, fingerprint | Does nothing when the generation is different or the state is not `CLOSED`. Deletes the old buckets. Adds the counts to the current bucket. Evaluates the failure condition. Makes transition T1 when the condition is true. Saves the fingerprint. |
+| `acquire_probe` | `AcquireProbe` | token, probe limit, lease duration, TTL, fingerprint | Makes transition T2 when the state is `OPEN` and the open duration ended. In `HALF_OPEN`, removes the leases that ended, then adds the token when the number of valid leases is below the limit, and saves the fingerprint. Returns if the lease is granted. |
+| `complete_probe` | `CompleteProbe` | generation, token, result, required successes, open duration, TTL, fingerprint | Does nothing when the state is not `HALF_OPEN` or the generation is different. Saves the fingerprint. Changes no state when the token has no valid lease. Removes the lease. On failure, makes transition T4. On success, increments `ps` and makes transition T3 when `ps` reaches the required number. |
+| `restore` | `Restore` | state, generation, transition time, open duration, TTL | Writes the snapshot only when its generation is higher than the stored generation. A key that does not exist has generation 0. Deletes the window and the leases when it writes. Keeps the field `fp`. |
 
-Each transition deletes the window and the leases, and sets `ps` to 0.
+Each transition deletes the window and the leases, and sets `ps` to 0. A transition keeps the field `fp`.
 The [state machine](../circuit-breaker/state-machine.md) defines the transitions T1 to T4.
 
 ### Second implementation of the transitions
@@ -188,6 +191,7 @@ Instance A: report(generation 100) → ignored, response: OPEN, generation 101
 | C10 Cleanup | The TTL of the keys. See section 9. |
 | C11 Data loss is visible | A key that does not exist gives `CLOSED` with generation 0. |
 | C12 No side effects | The adapter has no goroutine, no lock, and no timer. |
+| C13 Fingerprint | The field `fp` of the state hash. A script that accepts an event writes the fingerprint of its argument. Each reply contains the value from before the script. |
 
 ## 9. TTL
 
@@ -251,5 +255,4 @@ A network between the application and Redis adds its round-trip time.
 ## 13. Limits
 
 - Transition notifications are not implemented. The adapter does not use Pub/Sub. An instance observes a transition at its next synchronization, at most one sync interval later.
-- The configuration fingerprint is not implemented.
 - The adapter has no metrics of its own. `faultvaneotel.InstrumentStore` measures the duration of each operation. See [observability](../circuit-breaker/observability.md).

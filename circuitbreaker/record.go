@@ -25,10 +25,11 @@ type Record struct {
 	ProbeSuccesses int
 	Leases         []Lease
 	Buckets        []Bucket
+	Fingerprint    string
 }
 
 func (r Record) transition(to State, now time.Time, openDuration time.Duration) Record {
-	return Record{State: to, Generation: r.Generation + 1, TransitionAt: now, OpenDuration: openDuration}
+	return Record{State: to, Generation: r.Generation + 1, TransitionAt: now, OpenDuration: openDuration, Fingerprint: r.Fingerprint}
 }
 
 func (r Record) openUntil() time.Time {
@@ -93,13 +94,21 @@ func (r Record) completeProbe(generation, token uint64, result Result, now time.
 }
 
 func (r Record) Snapshot(now time.Time) Snapshot {
-	return Snapshot{State: r.State, Generation: r.Generation, TransitionAt: r.TransitionAt, OpenDuration: r.OpenDuration, StoreTime: now}
+	return Snapshot{State: r.State, Generation: r.Generation, TransitionAt: r.TransitionAt, OpenDuration: r.OpenDuration, StoreTime: now, Fingerprint: r.Fingerprint}
+}
+
+func (r Record) Apply(now time.Time, change func(Record, time.Time) Record) (Record, Snapshot) {
+	next := change(r, now)
+	snapshot := next.Snapshot(now)
+	snapshot.Fingerprint = r.Fingerprint
+	return next, snapshot
 }
 
 func (r Record) Report(now time.Time, report Report) Record {
 	if r.State != Closed || r.Generation != report.Generation {
 		return r
 	}
+	r.Fingerprint = report.Fingerprint
 	epoch := now.UnixNano() / int64(report.WindowSize/time.Duration(report.WindowBuckets))
 	oldest := epoch - int64(report.WindowBuckets) + 1
 	buckets := make([]Bucket, 0, len(r.Buckets)+1)
@@ -130,10 +139,17 @@ func (r Record) Report(now time.Time, report Report) Record {
 }
 
 func (r Record) AcquireProbe(now time.Time, request ProbeRequest) (Record, bool) {
-	return r.requestProbe(request.Token, now, request.Limit, request.LeaseDuration)
+	r, granted := r.requestProbe(request.Token, now, request.Limit, request.LeaseDuration)
+	if r.State == HalfOpen {
+		r.Fingerprint = request.Fingerprint
+	}
+	return r, granted
 }
 
 func (r Record) CompleteProbe(now time.Time, result ProbeResult) Record {
+	if r.State == HalfOpen && r.Generation == result.Generation {
+		r.Fingerprint = result.Fingerprint
+	}
 	return r.completeProbe(result.Generation, result.Token, result.Result, now, result.SuccessThreshold, result.OpenDuration)
 }
 
@@ -141,5 +157,5 @@ func (r Record) Restore(snapshot Snapshot) Record {
 	if snapshot.Generation <= r.Generation {
 		return r
 	}
-	return Record{State: snapshot.State, Generation: snapshot.Generation, TransitionAt: snapshot.TransitionAt, OpenDuration: snapshot.OpenDuration}
+	return Record{State: snapshot.State, Generation: snapshot.Generation, TransitionAt: snapshot.TransitionAt, OpenDuration: snapshot.OpenDuration, Fingerprint: r.Fingerprint}
 }

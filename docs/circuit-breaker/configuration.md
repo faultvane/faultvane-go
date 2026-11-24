@@ -209,4 +209,4 @@ The state TTL has no validation rule. Section 1 gives its effective value.
 - Set the open duration to the usual recovery time of the dependency.
 - Set the probe timeout longer than the longest possible call. Use a timeout policy to limit the call.
 - A lower sync interval gives faster propagation and more store load. [Architecture](architecture.md) gives the formula.
-- Use the same configuration for one breaker name in all instances. The library does not detect a difference. See [failure detection](failure-detection.md).
+- Use the same configuration for one breaker name in all instances. The library reports a difference of the values in the configuration fingerprint. It does not correct the difference. [Failure detection](failure-detection.md) lists these values.

@@ -170,12 +170,12 @@ func (s *Store) change(ctx context.Context, name string, ttl time.Duration, appl
 		return circuitbreaker.Snapshot{}, false, err
 	}
 	now := time.UnixMicro(micros)
-	record = apply(record, now)
+	record, snapshot := record.Apply(now, apply)
 	encoded, _ := json.Marshal(record)
 	if _, err = tx.ExecContext(ctx, s.queries.update, string(encoded), now.Add(ttl).UnixMicro(), s.namespace, name); err != nil {
 		return circuitbreaker.Snapshot{}, false, err
 	}
-	return record.Snapshot(now), false, tx.Commit()
+	return snapshot, false, tx.Commit()
 }
 
 func (s *Store) update(ctx context.Context, operation, name string, ttl time.Duration, apply func(circuitbreaker.Record, time.Time) circuitbreaker.Record) (circuitbreaker.Snapshot, error) {

@@ -3,6 +3,7 @@ package storetest
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -107,6 +108,42 @@ func (s withoutStoreTime) Load(ctx context.Context, name string) (circuitbreaker
 	return snapshot, err
 }
 
+type inventsAFingerprint struct{ *circuitbreaker.MemoryStore }
+
+func (s inventsAFingerprint) Load(ctx context.Context, name string) (circuitbreaker.Snapshot, error) {
+	snapshot, err := s.MemoryStore.Load(ctx, name)
+	if snapshot.Fingerprint == "" {
+		snapshot.Fingerprint = "invented"
+	}
+	return snapshot, err
+}
+
+type returnsTheFingerprintOfTheCaller struct{ *circuitbreaker.MemoryStore }
+
+func (s returnsTheFingerprintOfTheCaller) Report(ctx context.Context, name string, report circuitbreaker.Report) (circuitbreaker.Snapshot, error) {
+	snapshot, err := s.MemoryStore.Report(ctx, name, report)
+	snapshot.Fingerprint = report.Fingerprint
+	return snapshot, err
+}
+
+type savesTheFingerprintOfAnIgnoredReport struct{ *circuitbreaker.MemoryStore }
+
+func (s savesTheFingerprintOfAnIgnoredReport) Report(ctx context.Context, name string, report circuitbreaker.Report) (circuitbreaker.Snapshot, error) {
+	current, _ := s.Load(ctx, name)
+	accepted := report
+	accepted.Generation, accepted.Calls, accepted.Failures, accepted.SlowCalls = current.Generation, 0, 0, 0
+	_, _ = s.MemoryStore.Report(ctx, name, accepted)
+	return s.MemoryStore.Report(ctx, name, report)
+}
+
+type ignoresTheFingerprintOfAProbe struct{ *circuitbreaker.MemoryStore }
+
+func (s ignoresTheFingerprintOfAProbe) AcquireProbe(ctx context.Context, name string, request circuitbreaker.ProbeRequest) (circuitbreaker.ProbeGrant, error) {
+	current, _ := s.Load(ctx, name)
+	request.Fingerprint = current.Fingerprint
+	return s.MemoryStore.AcquireProbe(ctx, name, request)
+}
+
 type unavailable struct{}
 
 var errDown = errors.New("store down")
@@ -144,6 +181,25 @@ func failedChecks(newStore func() circuitbreaker.Store, patience time.Duration) 
 func TestTheSuiteAcceptsTheReference(t *testing.T) {
 	if failed := failedChecks(func() circuitbreaker.Store { return memory() }, 5*time.Second); len(failed) != 0 {
 		t.Fatalf("QA-8 the suite rejects the in-memory store: %v", failed)
+	}
+}
+
+func TestEachFingerprintCheckRejectsABrokenStore(t *testing.T) {
+	broken := map[string]func() circuitbreaker.Store{
+		"C13 a breaker without state has no fingerprint":                                                  func() circuitbreaker.Store { return inventsAFingerprint{memory()} },
+		"C13 a report saves the fingerprint of the caller and returns the fingerprint before it":          func() circuitbreaker.Store { return returnsTheFingerprintOfTheCaller{memory()} },
+		"C13 an operation that the store ignores does not change the fingerprint":                         func() circuitbreaker.Store { return savesTheFingerprintOfAnIgnoredReport{memory()} },
+		"C13 a probe operation saves the fingerprint of the caller and returns the fingerprint before it": func() circuitbreaker.Store { return ignoresTheFingerprintOfAProbe{memory()} },
+		"C13 restore does not change the fingerprint":                                                     func() circuitbreaker.Store { return restoresEachSnapshot{memory()} },
+		"C3 the store behaves as the reference for random sequences of operations":                        func() circuitbreaker.Store { return ignoresTheFingerprintOfAProbe{memory()} },
+	}
+	for check, newStore := range broken {
+		t.Run("QA-8 DS-9 a broken store fails the check: "+check, func(t *testing.T) {
+			t.Parallel()
+			if failed := failedChecks(newStore, 150*time.Millisecond); !slices.Contains(failed, check) {
+				t.Fatalf("failed checks = %q, want %q in them", failed, check)
+			}
+		})
 	}
 }
 

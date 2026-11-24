@@ -189,6 +189,39 @@ func TestData(t *testing.T) {
 		}
 	})
 
+	t.Run("DS-9 the state hash keeps the fingerprint of the last writer in the field fp", func(t *testing.T) {
+		store := newStore(t, client)
+		first := report(0, 1, time.Hour)
+		first.Fingerprint = "v1:first"
+		if snapshot, err := store.Report(ctx, "a", first); err != nil || snapshot.Fingerprint != "" {
+			t.Fatalf("Report() = %+v, %v, want no fingerprint before the first report", snapshot, err)
+		}
+		if fingerprint := client.HGet(ctx, store.keys("a")[0], "fp").Val(); fingerprint != "v1:first" {
+			t.Fatalf("field fp = %q, want v1:first", fingerprint)
+		}
+	})
+
+	t.Run("DS-9 a state hash without the field fp works and has no fingerprint", func(t *testing.T) {
+		store := newStore(t, client)
+		key := store.keys("a")[0]
+		if err := client.HSet(ctx, key, "v", 1, "st", 0, "gen", 3, "ts", 0, "od", 0, "ps", 0).Err(); err != nil {
+			t.Fatal(err)
+		}
+		old, err := store.Load(ctx, "a")
+		if err != nil || old.State != circuitbreaker.Closed || old.Generation != 3 || old.Fingerprint != "" {
+			t.Fatalf("Load() = %+v, %v, want closed generation 3 without a fingerprint", old, err)
+		}
+		next := report(3, 5, time.Hour)
+		next.Fingerprint = "v1:new"
+		opened, err := store.Report(ctx, "a", next)
+		if err != nil || opened.State != circuitbreaker.Open || opened.Generation != 4 || opened.Fingerprint != "" {
+			t.Fatalf("Report() = %+v, %v, want open generation 4 and no fingerprint before the report", opened, err)
+		}
+		if loaded, err := store.Load(ctx, "a"); err != nil || loaded.Fingerprint != "v1:new" {
+			t.Fatalf("Load() = %+v, %v, want the fingerprint v1:new", loaded, err)
+		}
+	})
+
 	t.Run("GEN-1 DS-4 large generations and times keep their exact value", func(t *testing.T) {
 		store := newStore(t, client)
 		at := time.UnixMicro(time.Now().UnixMicro())
@@ -304,25 +337,27 @@ func TestFaults(t *testing.T) {
 
 func TestParse(t *testing.T) {
 	t.Run("DS-5 a reply of integers and strings gives a snapshot", func(t *testing.T) {
-		snapshot, granted, err := parse([]any{int64(2), "7", "1700000000000001", "30000000", "1700000000000002", int64(1)})
+		snapshot, granted, err := parse([]any{int64(2), "7", "1700000000000001", "30000000", "1700000000000002", int64(1), "v1:0123456789abcdef"})
 		want := circuitbreaker.Snapshot{
 			State: circuitbreaker.HalfOpen, Generation: 7,
 			TransitionAt: time.UnixMicro(1700000000000001), OpenDuration: 30 * time.Second, StoreTime: time.UnixMicro(1700000000000002),
+			Fingerprint: "v1:0123456789abcdef",
 		}
 		if err != nil || !granted || snapshot != want {
 			t.Fatalf("parse() = %+v, %v, %v, want %+v", snapshot, granted, err, want)
 		}
-		if _, granted, _ := parse([]any{int64(0), "0", "0", "0", "0", int64(0)}); granted {
-			t.Fatal("granted = true for 0")
+		if snapshot, granted, err := parse([]any{int64(0), "0", "0", "0", "0", int64(0), ""}); err != nil || granted || snapshot.Fingerprint != "" {
+			t.Fatalf("parse() = %+v, %v, %v, want no grant and no fingerprint", snapshot, granted, err)
 		}
 	})
 
 	for name, raw := range map[string]any{
-		"RF-1 a reply that is not a list":          "OK",
-		"RF-1 a reply with 5 values":               []any{int64(0), "0", "0", "0", "0"},
-		"RF-1 a reply with 7 values":               []any{int64(0), "0", "0", "0", "0", int64(0), int64(0)},
-		"RF-1 a reply with a value of a bad type":  []any{int64(0), 1.5, "0", "0", "0", int64(0)},
-		"RF-1 a reply with text that is no number": []any{int64(0), "x", "0", "0", "0", int64(0)},
+		"RF-1 a reply that is not a list":                    "OK",
+		"RF-1 a reply with 6 values":                         []any{int64(0), "0", "0", "0", "0", int64(0)},
+		"RF-1 a reply with 8 values":                         []any{int64(0), "0", "0", "0", "0", int64(0), "", ""},
+		"RF-1 a reply with a value of a bad type":            []any{int64(0), 1.5, "0", "0", "0", int64(0), ""},
+		"RF-1 a reply with text that is no number":           []any{int64(0), "x", "0", "0", "0", int64(0), ""},
+		"RF-1 a reply with a fingerprint that is not a text": []any{int64(0), "0", "0", "0", "0", int64(0), int64(0)},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, _, err := parse(raw); err == nil {
@@ -508,6 +543,24 @@ func TestAcceptance(t *testing.T) {
 		}
 		if reached.Load() != 10 {
 			t.Fatalf("the dependency got %d calls, want 10", reached.Load())
+		}
+	})
+
+	t.Run("FD-8 OB-6 an instance finds the different configuration of the last writer through Redis", func(t *testing.T) {
+		writers, direct := newInstances(t, 1, circuitbreaker.WithOpenDuration(time.Hour))
+		reader, err := circuitbreaker.New("dependency", circuitbreaker.WithStore(direct), circuitbreaker.WithLogger(quiet), circuitbreaker.WithSyncInterval(40*time.Millisecond), circuitbreaker.WithStoreTimeout(30*time.Millisecond), circuitbreaker.WithEarlyReportInterval(5*time.Millisecond))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = reader.Close(context.Background()) })
+		writer := writers[0].breaker
+		_ = call(writer, errDependency)
+		eventually(t, "the reader finds the difference", func() bool { return reader.Stats().ConfigMismatch })
+		if stored(t, direct).Fingerprint != writer.ConfigFingerprint() || writer.Stats().ConfigMismatch {
+			t.Fatalf("Redis has the fingerprint %q, the writer has %q with mismatch %v", stored(t, direct).Fingerprint, writer.ConfigFingerprint(), writer.Stats().ConfigMismatch)
+		}
+		if err := call(reader, nil); err != nil {
+			t.Fatalf("Do() = %v, want a permitted call during the difference", err)
 		}
 	})
 
