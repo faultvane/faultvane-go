@@ -1,6 +1,6 @@
 # ADR 0009: Optional transition notifications as a signal to synchronize
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 
@@ -69,7 +69,7 @@ Negative:
 - The function works fully only when all instances set the option. An instance without the option, and an old version, publish no message for their transitions.
 - A wrapper around the store hides the interface `Notifier` unless it passes `Subscribe` to the store. `faultvaneotel.InstrumentStore` passes the method.
 - The channel name and the message are data in Redis that other tools can read. After version 1.0 they are a compatibility commitment.
-- With Redis access control lists, the user needs a permission for the channels. Without it, no message goes out, and no signal shows this condition except the statistic `Notifications` that stays 0.
+- With Redis access control lists, the user needs a permission for the channels. Without it, no message goes out, and no signal shows this condition except the statistic `Notifications` and the metric `notifications`, which stay 0.
 - In a Redis Cluster, `PUBLISH` sends each message to all nodes.
 - The tests run against one standalone server and one server with cluster mode on. No test shows the delivery between two nodes of a cluster.
 - A breaker does not subscribe again after `Subscribe` returned an error. The Redis adapter returns no error for a connection fault, because the client library connects again. A different adapter can need a different rule.
@@ -80,4 +80,3 @@ Negative:
 - The store operations of all instances at the same time after a transition are a problem. A possible change is a random delay before the synchronization.
 - The minimum version of the adapter becomes Redis 7.0 or later. `SPUBLISH` then keeps a message in one shard.
 - A user needs notifications for the SQL adapter or the MongoDB adapter, for example with `LISTEN` and `NOTIFY` or with change streams.
-- An operator needs a metric for the notifications. The OpenTelemetry module can then export `Notifications` and `SubscribeFailed`.
