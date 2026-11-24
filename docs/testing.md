@@ -23,7 +23,7 @@ This table gives each gate and its real status.
 | Goroutine leaks | The tests of each policy compare the number of goroutines before and after. | Each change | Active, as a part of the unit tests |
 | Conformance | Each store adapter passes the conformance suite against a real store. | Each change | Active |
 | Integration | The tests of each adapter with many instances pass against a real store. | Each change | Active |
-| Examples | The two example programs build, and the tests of their output pass. | Each change | Active |
+| Examples | The three example programs build, and the tests of their output pass. | Each change | Active |
 | Fuzzing | Each fuzz target runs for 3 minutes and finds nothing. | Each day | Active, as a scheduled workflow |
 | System benchmark | Acceptance test AT-7 passes with the Redis adapter. | Each week | Active, as a scheduled workflow |
 | Chaos | The fault tests pass. | Each change | Active only as tests of the Redis adapter with a TCP proxy. No separate scheduled gate exists. See section 8. |

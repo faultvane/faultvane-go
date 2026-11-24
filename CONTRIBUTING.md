@@ -24,7 +24,7 @@ The repository contains six Go modules. Each has its own `go.mod` file.
 | SQL adapter | `store/sql` | Package `sqlstore` |
 | MongoDB adapter | `store/mongodb` | Package `mongostore` |
 | OpenTelemetry | `otel` | Package `faultvaneotel` |
-| Examples | `examples` | The programs `pipeline` and `shared` |
+| Examples | `examples` | The programs `pipeline`, `shared`, and `grpc` |
 | Tools | `tools` | The program `mutation` for the mutation gate |
 
 Each separate module has a `replace` directive that points to the core in the repository.

@@ -90,6 +90,7 @@ receipt, err := faultvane.Execute(ctx, pipeline, func(ctx context.Context) (Rece
 ```
 
 The program in [`examples/pipeline`](examples/pipeline/main.go) runs this pipeline against a local HTTP server.
+The program in [`examples/grpc`](examples/grpc/main.go) puts a pipeline into a gRPC client interceptor. Its classifier does not count a status code that is an error of the caller, for example `NotFound`.
 
 ### A policy with shared state
 
