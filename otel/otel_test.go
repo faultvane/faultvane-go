@@ -114,6 +114,8 @@ func TestMetrics(t *testing.T) {
 			"faultvane.circuit_breaker.mode faultvane.breaker.mode=local" + p:                                          1,
 			"faultvane.circuit_breaker.local_mode_expired" + p:                                                         0,
 			"faultvane.circuit_breaker.config_mismatch" + p:                                                            0,
+			"faultvane.circuit_breaker.subscribe_failed" + p:                                                           0,
+			"faultvane.circuit_breaker.notifications" + p:                                                              0,
 			"faultvane.circuit_breaker.calls" + p + " result=success":                                                  1,
 			"faultvane.circuit_breaker.calls" + p + " result=failure":                                                  2,
 			"faultvane.circuit_breaker.calls" + p + " result=ignored":                                                  1,
@@ -172,6 +174,43 @@ func TestMetrics(t *testing.T) {
 		} {
 			if got[key] != value {
 				t.Errorf("%s = %d, want %d", key, got[key], value)
+			}
+		}
+	})
+
+	t.Run("OB-7 the metrics show the notifications and a failed subscription", func(t *testing.T) {
+		reader := sdkmetric.NewManualReader()
+		meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+		memory := circuitbreaker.NewMemoryStore(faultvane.SystemClock())
+		stores := map[string]circuitbreaker.Store{"notified": hinting{Store: memory}, "refused": hinting{Store: memory, err: errDown}}
+		ready := map[string]func(circuitbreaker.Stats) bool{
+			"notified": func(stats circuitbreaker.Stats) bool { return stats.Notifications == 1 },
+			"refused":  func(stats circuitbreaker.Stats) bool { return stats.SubscribeFailed },
+		}
+		for name, store := range stores {
+			breaker, err := circuitbreaker.New(name, circuitbreaker.WithLogger(quiet), circuitbreaker.WithStore(store), circuitbreaker.WithSyncInterval(time.Hour), circuitbreaker.WithWindowSize(100*time.Hour))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = breaker.Close(context.Background()) }()
+			for deadline := time.Now().Add(time.Minute); !ready[name](breaker.Stats()); time.Sleep(time.Millisecond) {
+				if time.Now().After(deadline) {
+					t.Fatalf("timeout: the breaker %s did not complete its subscription", name)
+				}
+			}
+			if _, err := RegisterMetrics(meter, breaker); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got := collect(t, reader)
+		for key, value := range map[string]int64{
+			"faultvane.circuit_breaker.notifications faultvane.breaker.name=notified":    1,
+			"faultvane.circuit_breaker.subscribe_failed faultvane.breaker.name=notified": 0,
+			"faultvane.circuit_breaker.notifications faultvane.breaker.name=refused":     0,
+			"faultvane.circuit_breaker.subscribe_failed faultvane.breaker.name=refused":  1,
+		} {
+			if actual, found := got[key]; !found || actual != value {
+				t.Errorf("%s = %d (found %v), want %d", key, actual, found, value)
 			}
 		}
 	})
@@ -365,6 +404,19 @@ func TestTraced(t *testing.T) {
 			t.Fatalf("%v allocations for each call without a span, want 0", allocations)
 		}
 	})
+}
+
+type hinting struct {
+	circuitbreaker.Store
+	err error
+}
+
+func (h hinting) Subscribe(_ context.Context, _ string, changed func()) (func(), error) {
+	if h.err != nil {
+		return nil, h.err
+	}
+	changed()
+	return func() {}, nil
 }
 
 type notifying struct {
