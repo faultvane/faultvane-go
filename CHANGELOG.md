@@ -14,6 +14,7 @@ No release exists yet. This section lists what the repository contains.
 - Statistics for the rate limiter: `Stats` and `RegisterRateLimitMetrics` in the `otel` module.
 - Statistics for the timeout, retry, bulkhead, concurrency limiter, and load shedding policies: a `Stats` method in each package, and the functions `RegisterTimeoutMetrics`, `RegisterRetryMetrics`, `RegisterBulkheadMetrics`, `RegisterConcurrencyLimitMetrics`, and `RegisterLoadShedMetrics` in the `otel` module.
 - Acceptance tests AT-3 to AT-6 for the SQL adapter and the MongoDB adapter against real stores.
+- Events and logs for the rate limiter with a store (mode changes and store faults) and for the concurrency limiter (limit changes): `WithObserver`, `WithLogger`, `Observer`, `Event`, and `EventKind` in each of the two packages.
 - A long run test for memory and goroutines, with a weekly workflow.
 - Mutation gate: the tool `tools/mutation` and `scripts/mutation.sh` check a mutation score of 90% or more for each policy package.
 - Scenario tests in Docker: 10 pods, a controllable dependency, and Redis, PostgreSQL, MySQL, and MongoDB.
