@@ -30,7 +30,8 @@ Continuous integration rejects a change that does not pass all gates.
 No gate has a manual override.
 A change that cannot pass a gate changes the code or the test, not the gate.
 
-The gates for format, static analysis, unit tests, and coverage are active now.
+Active now: format, static analysis, unit tests, coverage, goroutine leaks, requirement traceability, and fuzzing.
+Not active yet: the mutation gate. Section 2 gives the reason.
 Each other gate becomes active in the milestone that adds its tests. The [roadmap](roadmap.md) names the milestone.
 
 ## 2. Coverage rule
@@ -73,6 +74,11 @@ Three other gates find it:
 - **Mutation tests** change the code, for example `>=` to `>`. A test must fail for each change. The state machine, the window, the failure condition, and the synchronizer must have a mutation score of 90% or more.
 - **Requirement traceability.** Each requirement identifier and each acceptance test of the requirements documents has a named test. Section 9 gives the rule.
 - **Property tests** check the invariants with random inputs that no person wrote.
+
+### Status of the mutation gate
+
+The mutation gate needs an external tool in continuous integration. The tool is not selected and not tested yet.
+Until then, the maintainers run mutations by hand before the end of a milestone and record the result in the roadmap.
 
 ### Scripts in a store
 
@@ -185,9 +191,8 @@ Each requirement and each acceptance test has an identifier, for example `GEN-3`
 
 - The name of an acceptance test contains its identifier, for example `TestAT5_StaleWriterIsRejected`.
 - A test that proves a requirement names the identifier in a subtest name or in the test table.
-- A check in continuous integration reads the identifiers from the requirements documents and fails when an identifier has no test.
-
-This check starts with milestone M1. Until a requirement is implemented, the check reads the list of the identifiers that the completed milestones cover.
+- The script `scripts/traceability.sh` runs in continuous integration. It reads `scripts/implemented-requirements.txt`, the list of the requirements that the completed milestones implement. It fails when an identifier of the list has no test, or when a test names an identifier that the requirements documents do not define.
+- A requirement about the documentation or about the process, for example TK-4 or QA-3, has no test in the code. A review checks it.
 
 ## 10. Benchmarks
 
@@ -199,8 +204,8 @@ This check starts with milestone M1. Until a requirement is implemented, the che
 | `Execute` in `CLOSED`, parallel on all cores | No drop of throughput from contention |
 | `Execute` in `OPEN` | Less than 50 ns, 0 allocations |
 
-These values are targets, not measurements.
-The first measurement becomes the baseline in the repository.
+These values are targets.
+[Benchmarks](benchmarks.md) records the measured results. The first measurement of each benchmark is its baseline.
 A later change must not make the baseline worse without a documented reason.
 A test asserts zero allocations with `testing.AllocsPerRun`, so this property is part of the normal test run.
 
@@ -223,6 +228,7 @@ The run passes when the store operation rate does not change with the request ra
 go build ./...
 go vet ./...
 sh scripts/coverage.sh
+sh scripts/traceability.sh
 ```
 
 `scripts/coverage.sh` runs all tests of the module with the race detector, prints the coverage of each package, and fails below the minimum.

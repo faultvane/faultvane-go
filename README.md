@@ -8,16 +8,16 @@ Faultvane is a resilience toolkit for Go services.
 It gives you the policies that keep a service stable when a dependency is slow, fails, or gets too much traffic.
 You can use each policy alone, or combine the policies in one pipeline.
 
-> **Status: design phase.**
-> The repository contains the design and the plan.
-> It does not contain an implementation yet.
-> The API in this document is the planned API. It can change before version 1.0.
+> **Status: early development.**
+> The core of the toolkit and the local circuit breaker are implemented and tested.
+> Shared state and the other policies are not implemented yet. The [roadmap](docs/roadmap.md) gives the order.
+> The API can change before version 1.0.
 
 ## Policies
 
 | Policy | Problem that it solves | Shared state between instances |
 |---|---|---|
-| **Circuit breaker** | A dependency is down. Calls to it waste time and add load. | Optional |
+| **Circuit breaker** | A dependency is down. Calls to it waste time and add load. | Optional, planned |
 | **Timeout** | A call does not return. | No |
 | **Retry** | A call fails for a short time. A second attempt can succeed. | No |
 | **Bulkhead** | One slow dependency uses all resources of the service. | No |
@@ -38,9 +38,11 @@ The other policies follow in the order that the roadmap gives.
 - **No required dependencies.** The core module uses only the Go standard library. Each integration is a separate module.
 - **Tested for production.** The project requires a statement coverage of 98% or more, with unit, integration, concurrency, and fault tests. Continuous integration rejects a change below this value.
 
-## Planned usage
+## Usage
 
 ### One policy
+
+This part works now.
 
 ```go
 breaker, err := circuitbreaker.New("payment-service",
@@ -61,6 +63,8 @@ if errors.Is(err, faultvane.ErrRejected) {
 
 ### Many policies
 
+`faultvane.Combine` and `faultvane.Execute` work now. The bulkhead, retry, and timeout policies of this example are planned.
+
 ```go
 pipeline := faultvane.Combine(
     bulkhead.New(bulkhead.WithMaxConcurrent(50)),
@@ -75,6 +79,8 @@ receipt, err := faultvane.Execute(ctx, pipeline, func(ctx context.Context) (Rece
 ```
 
 ### A policy with shared state
+
+This part is planned.
 
 ```go
 store := redisstore.New(redisClient, redisstore.WithNamespace("production"))
@@ -99,6 +105,7 @@ No instance has to reach the threshold alone.
 | [Circuit breaker](docs/circuit-breaker/README.md) | The design of the circuit breaker |
 | [Stores](docs/stores/README.md) | The store interface, the adapters, and the contract for a new adapter |
 | [Decision records](docs/adr/README.md) | The important design decisions and their alternatives |
+| [Benchmarks](docs/benchmarks.md) | Measured results |
 
 ## Requirements
 
