@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/faultvane/faultvane-go"
 	"github.com/faultvane/faultvane-go/faultvanetest"
@@ -73,6 +74,76 @@ func TestValidation(t *testing.T) {
 	for name, tc := range cases {
 		t.Run("RL-14 TK-21 "+name+" is rejected", func(t *testing.T) {
 			limiter, err := New(tc.option)
+			if limiter != nil || !errors.Is(err, faultvane.ErrInvalidConfig) {
+				t.Fatalf("New() = %v, %v, want nil and ErrInvalidConfig", limiter, err)
+			}
+			if !strings.HasSuffix(err.Error(), ": "+tc.want) {
+				t.Fatalf("error = %q, want the reason %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestStoreOptions(t *testing.T) {
+	store := NewMemoryStore(faultvane.SystemClock())
+
+	t.Run("RL-33 RL-34 TK-20 each store option has its documented default", func(t *testing.T) {
+		c, err := newConfig([]Option{WithRate(40), WithStore(store), WithName("a")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.syncInterval != 100*time.Millisecond || c.storeTimeout != 50*time.Millisecond || c.localRate != 40 || c.faultThreshold != 3 {
+			t.Fatalf("config = %+v", c)
+		}
+	})
+
+	t.Run("RL-32 RL-33 RL-34 each store option sets its value", func(t *testing.T) {
+		c, err := newConfig([]Option{
+			WithStore(store), WithName("azAZ09._-"), WithSyncInterval(time.Second), WithStoreTimeout(time.Second - 1),
+			WithLocalRate(100), WithFaultThreshold(1),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.store != Store(store) || c.name != "azAZ09._-" || c.syncInterval != time.Second || c.storeTimeout != time.Second-1 || c.localRate != 100 || c.faultThreshold != 1 {
+			t.Fatalf("config = %+v", c)
+		}
+	})
+
+	t.Run("RL-32 a name of 64 characters is accepted", func(t *testing.T) {
+		if _, err := newConfig([]Option{WithStore(store), WithName(strings.Repeat("a", 64))}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("RL-20 TK-30 a limiter without a store ignores the store options", func(t *testing.T) {
+		limiter, err := New(WithName("a b"), WithSyncInterval(0), WithStoreTimeout(0), WithLocalRate(0), WithFaultThreshold(0))
+		if err != nil || limiter.shared != nil {
+			t.Fatalf("New() = %+v, %v", limiter, err)
+		}
+	})
+
+	const nameRule = "Name must have 1 to 64 characters from a-z, A-Z, 0-9, '.', '_', '-'"
+	cases := map[string]struct {
+		opts []Option
+		want string
+	}{
+		"RL-32 nil store":                              {[]Option{WithStore(nil)}, "Store must not be nil"},
+		"RL-32 no name":                                {[]Option{WithName("")}, nameRule},
+		"RL-32 name of 65 characters":                  {[]Option{WithName(strings.Repeat("a", 65))}, nameRule},
+		"RL-32 name with a colon":                      {[]Option{WithName("a:b")}, nameRule},
+		"RL-32 name outside the ASCII range":           {[]Option{WithName("café")}, nameRule},
+		"RL-33 store timeout of zero":                  {[]Option{WithStoreTimeout(0)}, "StoreTimeout must be above 0"},
+		"RL-33 interval equal to the store timeout":    {[]Option{WithSyncInterval(50 * time.Millisecond)}, "SyncInterval must be longer than StoreTimeout"},
+		"RL-34 local rate of zero":                     {[]Option{WithLocalRate(0)}, "LocalRate must be above 0 and at most Rate"},
+		"RL-34 local rate above the rate":              {[]Option{WithLocalRate(100.5)}, "LocalRate must be above 0 and at most Rate"},
+		"RL-34 local rate that is NaN":                 {[]Option{WithLocalRate(math.NaN())}, "LocalRate must be above 0 and at most Rate"},
+		"RL-34 fault threshold of zero":                {[]Option{WithFaultThreshold(0)}, "FaultThreshold must be 1 or more"},
+		"RL-14 invalid rate of a limiter with a store": {[]Option{WithRate(0)}, "Rate must be above 0 and at most 1e9"},
+	}
+	for name, tc := range cases {
+		t.Run(name+" is rejected TK-21", func(t *testing.T) {
+			limiter, err := New(append([]Option{WithStore(store), WithName("a")}, tc.opts...)...)
 			if limiter != nil || !errors.Is(err, faultvane.ErrInvalidConfig) {
 				t.Fatalf("New() = %v, %v, want nil and ErrInvalidConfig", limiter, err)
 			}

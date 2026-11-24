@@ -9,13 +9,24 @@ import (
 )
 
 type Limiter struct {
-	rate  float64
-	burst float64
-	clock faultvane.Clock
+	clock  faultvane.Clock
+	shared *shared
 
-	mu     sync.Mutex
-	since  time.Time
-	tokens float64
+	mu        sync.Mutex
+	rate      float64
+	burst     float64
+	since     time.Time
+	tokens    float64
+	permitted int64
+	rejected  int64
+}
+
+type Stats struct {
+	Mode        Mode
+	Permitted   int64
+	Rejected    int64
+	StoreErrors int64
+	Allowance   int64
 }
 
 var _ faultvane.Policy = (*Limiter)(nil)
@@ -26,7 +37,11 @@ func New(opts ...Option) (*Limiter, error) {
 		return nil, err
 	}
 	burst := float64(cfg.burst)
-	return &Limiter{rate: cfg.rate, burst: burst, clock: cfg.clock, since: cfg.clock.Now(), tokens: burst}, nil
+	l := &Limiter{rate: cfg.rate, burst: burst, clock: cfg.clock, since: cfg.clock.Now(), tokens: burst}
+	if cfg.storeSet {
+		l.start(cfg)
+	}
+	return l, nil
 }
 
 func (l *Limiter) available(now time.Time) float64 {
@@ -43,9 +58,11 @@ func (l *Limiter) Allow() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.available(now) < 1 {
+		l.rejected++
 		return false
 	}
 	l.tokens--
+	l.permitted++
 	return true
 }
 
@@ -57,4 +74,15 @@ func (l *Limiter) Do(ctx context.Context, call func(context.Context) error) erro
 		return ErrRateLimited
 	}
 	return call(ctx)
+}
+
+func (l *Limiter) Stats() Stats {
+	now := l.clock.Now()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	stats := Stats{Mode: Local, Permitted: l.permitted, Rejected: l.rejected, Allowance: whole(l.available(now))}
+	if s := l.shared; s != nil {
+		stats.Mode, stats.StoreErrors = s.mode, s.storeErrors
+	}
+	return stats
 }

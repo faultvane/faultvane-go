@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -410,12 +411,13 @@ func TestResources(t *testing.T) {
 		}
 	})
 
-	t.Run("RL-18 TK-15 the limiter code contains no go statement", func(t *testing.T) {
+	t.Run("RL-18 RL-31 TK-15 the limiter code starts a goroutine only for the synchronizer", func(t *testing.T) {
 		entries, err := os.ReadDir(".")
 		if err != nil {
 			t.Fatal(err)
 		}
 		checked := 0
+		var found []string
 		for _, entry := range entries {
 			if !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
 				continue
@@ -426,14 +428,14 @@ func TestResources(t *testing.T) {
 			}
 			checked++
 			ast.Inspect(file, func(node ast.Node) bool {
-				if _, found := node.(*ast.GoStmt); found {
-					t.Errorf("%s contains a go statement", entry.Name())
+				if _, isGo := node.(*ast.GoStmt); isGo {
+					found = append(found, entry.Name())
 				}
 				return true
 			})
 		}
-		if checked == 0 {
-			t.Fatal("the test found no source file")
+		if checked == 0 || !slices.Equal(found, []string{"sync.go"}) {
+			t.Fatalf("checked %d files, go statements in %v, want one in sync.go", checked, found)
 		}
 	})
 
