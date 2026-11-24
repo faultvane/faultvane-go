@@ -12,6 +12,7 @@ It also gives the conditions under which the team must examine the decision agai
 | [0004](0004-local-breaker-fallback.md) | Local breaker as the fallback | Accepted |
 | [0005](0005-module-layout.md) | One repository with a dependency-free core module | Accepted |
 | [0006](0006-store-interface-and-adapters.md) | Store interface with adapters | Accepted |
+| [0007](0007-shared-record-for-go-adapters.md) | One exported record type for the adapters written in Go | Accepted |
 
 ## Add a record
 
