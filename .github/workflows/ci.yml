@@ -66,3 +66,6 @@ jobs:
       - name: Test the OpenTelemetry module
         working-directory: otel
         run: sh ../scripts/coverage.sh
+      - name: Build and run the examples
+        working-directory: examples
+        run: go vet ./... && go test -count=1 ./...

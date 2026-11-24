@@ -1,0 +1,27 @@
+name: System benchmark
+
+on:
+  schedule:
+    - cron: "41 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  system:
+    name: Acceptance test AT-7
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: Start Redis
+        run: docker compose -f docker-compose.test.yml up -d --wait redis
+      - name: Run the system benchmark
+        working-directory: store/redis
+        env:
+          FAULTVANE_SYSTEM_TEST: "1"
+        run: go test -count=1 -run TestSystem -v ./...
