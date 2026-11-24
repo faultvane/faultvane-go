@@ -3,8 +3,8 @@ module github.com/faultvane/faultvane-go/examples
 go 1.26.0
 
 require (
-	github.com/faultvane/faultvane-go v0.0.0
-	github.com/faultvane/faultvane-go/store/redis v0.0.0
+	github.com/faultvane/faultvane-go v0.1.0
+	github.com/faultvane/faultvane-go/store/redis v0.1.0
 	github.com/redis/go-redis/v9 v9.23.0
 	google.golang.org/grpc v1.85.0
 )

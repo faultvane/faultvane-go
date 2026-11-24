@@ -6,7 +6,10 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-No release exists yet. This section lists what the repository contains.
+## [0.1.0] - 2026-11-24
+
+This is the first release. Each module has the same version.
+The shared rate limit and the transition notifications are experimental. Their API and their stored data can change in a minor version.
 
 ### Added
 
@@ -59,10 +62,9 @@ Documents:
 
 - Requirements and a guide or design documents for each of the seven policies.
 - Documents for the store contract and for the Redis, SQL, and MongoDB adapters.
-- Decision records 0001 to 0007.
+- Decision records 0001 to 0009.
 - Apache License 2.0.
 
 ### Not included
 
-- A release tag.
 - Logs and an observer for the timeout, retry, bulkhead, and load shedding policies. These policies have no state changes and no faults.

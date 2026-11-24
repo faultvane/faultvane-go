@@ -5,7 +5,7 @@ The toolkit contains seven policies. The circuit breaker was the first, because 
 Each milestone has a scope and exit criteria.
 
 Status on 2026-11-24: the code of all milestones M1 to M12 is implemented and merged.
-No release tag exists. The release is the decision of the owner of the project.
+The first release is version 0.1.0.
 Some exit criteria are not satisfied. Each milestone below gives its real result, and section 5 lists the open items.
 
 The identifiers refer to the [toolkit requirements](requirements.md) and the [circuit breaker requirements](circuit-breaker/requirements.md).
@@ -239,7 +239,7 @@ Result:
 - [x] The documents describe the implemented behavior and the measured values.
 - [ ] Not done: package documentation. See section 5.
 - [x] The changelog lists the content under `[Unreleased]`.
-- [ ] Not done: version tags. No release exists.
+- [x] Each module has the version tag 0.1.0.
 - [x] The acceptance tests AT-1 to AT-6 pass in continuous integration. AT-7 runs in a scheduled workflow.
 
 ## 3. Milestones for more store adapters
@@ -285,7 +285,7 @@ Difference from the plan: the adapter uses a compare-and-set on a version field 
 ## 4. Milestones for the other policies
 
 Each policy has its own requirements document and guide.
-The plan was that each milestone ends with a release. No release exists.
+The plan was that each milestone ends with a release. The first release, version 0.1.0, contains all milestones.
 
 ### M10: Timeout and retry
 
@@ -318,7 +318,7 @@ Result:
 
 | Item | Detail |
 |---|---|
-| No release tag | No module has a version tag. Each separate module uses a `replace` directive to the core in the same repository, and requires the core with the version `v0.0.0`. A release needs a tag for each module and a real version in each `go.mod`. The release is the decision of the owner. |
+| Release steps | A release is a manual sequence: a version in each `go.mod`, the changelog, all workflows on the release commit, then one tag for each module. No workflow automates it. Each separate module keeps a `replace` directive to the core in the same repository; a user of the module does not get this directive. |
 | Mutants that survive | 3 mutants survive in `circuitbreaker/sync.go`. No test proves the delay calculation of the synchronizer loop. The mutation gate does not apply to `circuitbreaker/storetest` (score 63.2%), to the store adapters, or to the `otel` module. |
 | Logs of the concurrency limiter | The concurrency limiter writes a log record only when the limit reaches the minimum and when it returns to the initial limit. If the dependency then serves fewer calls than the initial limit, a second decrease to the minimum gives no log record. The observer and the metrics show each change. |
 | Cost of the limit events | A call of the concurrency limiter that adapts the limit is about 1 ns slower, because the limiter compares the limit after each adaptation. |
@@ -349,7 +349,7 @@ Result:
 - [x] The circuit breaker has metrics, logs, and events for its state, its mode, and its store faults.
 - [ ] Benchmarks show that the cost is acceptable. The results exist for one machine only.
 - [x] Each critical race has an automated test with the race detector.
-- [ ] The coverage is 98% or more, and each requirement has a test (QA-1 to QA-14). The coverage gate and the mutation gate are active. The release gate QA-14 is not satisfied.
+- [ ] The coverage is 98% or more, and each requirement has a test (QA-1 to QA-14). The coverage gate and the mutation gate are active. For the release gate QA-14, a person runs all workflows on the release commit before the tags; no automation enforces it.
 - [x] The documentation describes the consistency model and the failure model.
 
 ## 7. Confirmed decisions

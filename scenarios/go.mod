@@ -3,10 +3,10 @@ module github.com/faultvane/faultvane-go/scenarios
 go 1.26.0
 
 require (
-	github.com/faultvane/faultvane-go v0.0.0
-	github.com/faultvane/faultvane-go/store/mongodb v0.0.0
-	github.com/faultvane/faultvane-go/store/redis v0.0.0
-	github.com/faultvane/faultvane-go/store/sql v0.0.0
+	github.com/faultvane/faultvane-go v0.1.0
+	github.com/faultvane/faultvane-go/store/mongodb v0.1.0
+	github.com/faultvane/faultvane-go/store/redis v0.1.0
+	github.com/faultvane/faultvane-go/store/sql v0.1.0
 	github.com/go-sql-driver/mysql v1.10.2
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/redis/go-redis/v9 v9.23.0

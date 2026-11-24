@@ -8,10 +8,10 @@ Faultvane is a resilience toolkit for Go services.
 It gives you the policies that keep a service stable when a dependency is slow, fails, or gets too much traffic.
 You can use each policy alone, or combine the policies in one pipeline.
 
-> **Status: implemented, not released.**
+> **Status: version 0.1.0.**
 > All seven policies are implemented and tested.
 > The circuit breaker shares its state through Redis, a SQL database, or MongoDB.
-> No release tag exists yet. The [roadmap](docs/roadmap.md) lists the open items.
+> The [roadmap](docs/roadmap.md) lists the open items.
 > The API can change before version 1.0.
 
 ## Policies
@@ -169,7 +169,12 @@ Each module names its minimum Go version in its `go.mod` file.
 | OpenTelemetry | `github.com/faultvane/faultvane-go/otel` | 1.26 | The OpenTelemetry API |
 
 The Go version of an adapter module comes from the client library of its store.
-No release tag exists yet.
+Each module has its own version tag with the same number, for example `v0.1.0` for the core and `store/redis/v0.1.0` for the Redis adapter.
+
+```sh
+go get github.com/faultvane/faultvane-go@v0.1.0
+go get github.com/faultvane/faultvane-go/store/redis@v0.1.0
+```
 
 ## Contributing
 

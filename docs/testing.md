@@ -40,8 +40,12 @@ A change that cannot pass a gate changes the code or the test, not the gate.
 | CI | `.github/workflows/ci.yml` | `test`: format, build, `go vet`, coverage, and traceability for the core module. `lint`: `golangci-lint`. `stores`: the adapter modules against real stores, the `otel` module, and the examples. |
 | Fuzz | `.github/workflows/fuzz.yml` | Eight fuzz targets, each day, 3 minutes for each target. |
 | System benchmark | `.github/workflows/system.yml` | Acceptance test AT-7 with Redis, each week. |
+| Scenarios | `.github/workflows/scenarios.yml` | The Docker scenarios with 10 pods, each day. |
+| Mutation | `.github/workflows/mutation.yml` | The mutation gate for the seven policy packages, each day. |
+| Long run | `.github/workflows/long-run.yml` | One hour of load with a check of the heap and the goroutines, each week. |
+| Benchmarks | `.github/workflows/benchmarks.yml` | The core benchmarks on a Linux runner, started by a person. |
 
-No release exists yet. For this reason, no gate ran "before a release".
+For version 0.1.0, a person ran all workflows on the release commit before the tags. No automation enforces this order.
 
 ## 2. Coverage rule
 
