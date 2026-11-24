@@ -193,3 +193,10 @@ The test does not stop the database container.
 
 The tests need the databases of `docker-compose.test.yml`.
 `sh scripts/test-stores.sh` starts them.
+
+## 10. Rate limit store
+
+The module also contains a store for the shared limit of the rate limiter: `sqlstore.NewRateLimitStore`.
+It uses the options, the dialects, the clock, and the cleanup method of this adapter.
+It keeps its data in a different table. The default name is `faultvane_rate_limits`.
+The [rate limit store](../ratelimit/store.md) describes the table, the transaction, and the limits.

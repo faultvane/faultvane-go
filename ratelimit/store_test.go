@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -74,6 +75,33 @@ func TestMemoryStore(t *testing.T) {
 		}
 		if grant := acquire(t, store, Acquire{Wanted: 5, Rate: 10, Burst: 5}); grant.Tokens != 5 {
 			t.Fatalf("grant = %+v, want 5 tokens", grant)
+		}
+	})
+}
+
+func TestBucketAcquire(t *testing.T) {
+	t.Run("RL-48 an operation refills, adds the returned tokens, limits to the burst, and grants whole tokens", func(t *testing.T) {
+		steps := []struct {
+			bucket  Bucket
+			after   time.Duration
+			request Acquire
+			tokens  float64
+			granted int64
+		}{
+			{Bucket{Tokens: 5, At: testStart}, 0, Acquire{Wanted: 3, Rate: 10, Burst: 5}, 2, 3},
+			{Bucket{Tokens: 0.5, At: testStart}, 120 * time.Millisecond, Acquire{Wanted: 9, Rate: 10, Burst: 5}, 0.7, 1},
+			{Bucket{Tokens: 1, At: testStart}, time.Hour, Acquire{Wanted: 2, Rate: 10, Burst: 5}, 3, 2},
+			{Bucket{Tokens: 1, At: testStart}, 0, Acquire{Wanted: 9, Returned: 2, Rate: 10, Burst: 5}, 0, 3},
+			{Bucket{Tokens: 4, At: testStart}, 0, Acquire{Returned: 7, Rate: 10, Burst: 5}, 5, 0},
+			{Bucket{Tokens: 4, At: testStart}, 0, Acquire{Wanted: -1, Rate: 10, Burst: 5}, 4, 0},
+			{Bucket{Tokens: 1, At: testStart}, -time.Second, Acquire{Wanted: 9, Rate: 10, Burst: 5}, 0, 1},
+		}
+		for i, step := range steps {
+			now := testStart.Add(max(step.after, 0))
+			bucket, grant := step.bucket.Acquire(testStart.Add(step.after), step.request)
+			if math.Abs(bucket.Tokens-step.tokens) > 1e-9 || !bucket.At.Equal(now) || grant.Tokens != step.granted || !grant.StoreTime.Equal(now) {
+				t.Errorf("step %d: bucket = %+v, grant = %+v, want %v tokens and a grant of %d at %v", i, bucket, grant, step.tokens, step.granted, now)
+			}
 		}
 	})
 }

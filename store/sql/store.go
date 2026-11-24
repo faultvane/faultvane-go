@@ -89,11 +89,16 @@ func New(db *sql.DB, dialect Dialect, opts ...Option) (*Store, error) {
 	return s, nil
 }
 
+func (s *Store) now() string {
+	if s.dialect == MySQL {
+		return "CAST(UNIX_TIMESTAMP(NOW(6)) * 1000000 AS SIGNED)"
+	}
+	return "(EXTRACT(EPOCH FROM clock_timestamp()) * 1000000)::bigint"
+}
+
 func (s *Store) build() queries {
-	now := "(EXTRACT(EPOCH FROM clock_timestamp()) * 1000000)::bigint"
 	insert := "INSERT INTO %[1]s (namespace, name, record, expires_at) VALUES (?, ?, '{}', %[2]s + %[3]d) ON CONFLICT (namespace, name) DO NOTHING"
 	if s.dialect == MySQL {
-		now = "CAST(UNIX_TIMESTAMP(NOW(6)) * 1000000 AS SIGNED)"
 		insert = "INSERT IGNORE INTO %[1]s (namespace, name, record, expires_at) VALUES (?, ?, '{}', %[2]s + %[3]d)"
 	}
 	q := queries{
@@ -105,7 +110,7 @@ func (s *Store) build() queries {
 		cleanup: "DELETE FROM %[1]s WHERE expires_at < %[2]s",
 	}
 	for _, query := range []*string{&q.schema, &q.insert, &q.lock, &q.update, &q.load, &q.cleanup} {
-		*query = s.placeholders(fmt.Sprintf(*query, s.table, now, restoreTTL.Microseconds()))
+		*query = s.placeholders(fmt.Sprintf(*query, s.table, s.now(), restoreTTL.Microseconds()))
 	}
 	return q
 }
@@ -146,6 +151,12 @@ func (s *Store) Cleanup(ctx context.Context) (int64, error) {
 		return 0, s.fail("cleanup", err)
 	}
 	return result.RowsAffected()
+}
+
+func (s *Store) cleanupAt(ctx context.Context, now time.Time) {
+	if last := s.lastCleanup.Load(); now.UnixMicro()-last >= cleanupInterval.Microseconds() && s.lastCleanup.CompareAndSwap(last, now.UnixMicro()) {
+		_, _ = s.Cleanup(ctx)
+	}
 }
 
 func decode(text string) (circuitbreaker.Record, error) {
@@ -209,8 +220,8 @@ func (s *Store) Report(ctx context.Context, name string, report circuitbreaker.R
 	snapshot, err := s.update(ctx, "report", name, report.StateTTL, func(r circuitbreaker.Record, now time.Time) circuitbreaker.Record {
 		return r.Report(now, report)
 	})
-	if last := s.lastCleanup.Load(); err == nil && snapshot.StoreTime.UnixMicro()-last >= cleanupInterval.Microseconds() && s.lastCleanup.CompareAndSwap(last, snapshot.StoreTime.UnixMicro()) {
-		_, _ = s.Cleanup(ctx)
+	if err == nil {
+		s.cleanupAt(ctx, snapshot.StoreTime)
 	}
 	return snapshot, err
 }

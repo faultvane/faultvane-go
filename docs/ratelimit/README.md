@@ -32,6 +32,7 @@ The package is `github.com/faultvane/faultvane-go/ratelimit`.
 | `ErrRateLimited` | The error of a rejected call. It matches `faultvane.ErrRejected`. |
 | `Store`, `Acquire`, `Grant` | The interface of a shared store and the data of its operation. [Store](store.md) describes them. |
 | `NewMemoryStore(clock) *MemoryStore` | Makes a store in local memory. Use it for tests and for limiters in one process. |
+| `Bucket` | The calculation of one store operation. A store adapter uses it. [Store](store.md) describes it. |
 | `Observer`, `Event`, `EventKind` | The interface and the data of the events. Section 7 describes them. |
 
 ### Limit a function
@@ -141,6 +142,17 @@ defer limiter.Close(ctx)
 
 All limiters with one name must have the same rate and the same burst.
 
+These stores exist:
+
+| Store | Constructor |
+|---|---|
+| In-memory | `ratelimit.NewMemoryStore(clock)` |
+| Redis | `redisstore.NewRateLimitStore(client, opts...)` |
+| SQL (PostgreSQL and MySQL) | `sqlstore.NewRateLimitStore(db, dialect, opts...)` |
+| MongoDB | `mongostore.NewRateLimitStore(collection, opts...)` |
+
+[Store](store.md) describes the setup, the data, and the limits of each store.
+
 ### Options
 
 | Option | Default | Valid values | Function |
@@ -191,7 +203,7 @@ In usual operation `H` is much smaller than `N × burst`.
 An instance without calls holds 1 token. An instance with a constant number of calls holds at most two times the calls of one synchronization interval.
 
 The property test `TestGuarantee` in `ratelimit/shared_test.go` checks this limit for each window of random sequences of calls and synchronizations.
-The acceptance test RL-39 checks it with 10 limiters and a real Redis.
+The acceptance tests RL-39, RL-52, and RL-57 check it with 10 limiters and a real Redis, PostgreSQL, MySQL, and MongoDB.
 The [scenarios in Docker](../scenarios.md) check it with 10 pods in separate containers, also after a Redis outage.
 
 ### Local mode
@@ -369,7 +381,7 @@ A token that a call removed does not come back. This is also true when a policy 
 - An instance does not give its tokens back when it stops. `Close` does not call the store. The tokens of a failed synchronization are also lost. The instances then permit fewer calls than the limit.
 - Each instance holds at least 1 token after it got one. When the number of instances is near the burst or above it, the tokens of idle instances are a large part of the burst.
 - In local mode, the instances do not coordinate. The total rate is the sum of the local rates.
-- Only two stores exist: the in-memory store and the Redis store. The Redis store has tests with one Redis server without cluster mode and with one Redis server with cluster mode on. It has no test with a cluster of many nodes.
+- Only four stores exist: the in-memory store, the Redis store, the SQL store for PostgreSQL and MySQL, and the MongoDB store. [Store](store.md) gives the limits of each store. The Redis store has tests with one Redis server without cluster mode and with one Redis server with cluster mode on. It has no test with a cluster of many nodes.
 - The limiter writes no log for a failed synchronization in local mode. `StoreErrors` counts these faults.
 - The observer gets no event for a call. The numbers of permitted and rejected calls come from `Stats`.
 - The limiter does not wait for a token. The application decides what to do after a rejection.
