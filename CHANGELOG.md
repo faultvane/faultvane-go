@@ -11,6 +11,7 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Repository foundation.
 - Apache License 2.0.
 - Store interface with adapters in the design: the shared state can be in Redis, a SQL database, or another store.
+- Quality requirements: a coverage minimum of 98% for each module and 95% for each package, enforced in continuous integration.
 - Continuous integration with build, `go vet`, static analysis, and tests.
 - Requirements and architecture for the toolkit and its seven policies.
 - Design documents, decision records, and roadmap for the circuit breaker.

@@ -1,31 +1,136 @@
 # Testing
 
-## 1. Test levels
+Faultvane protects production services.
+A defect in it can cause an outage or hide one.
+For this reason, tests are a primary product of this project, not an addition to it.
+
+A user of the library must be able to trust two statements:
+
+1. Each line of the library ran in a test.
+2. Each scenario that the documentation describes has a test that proves it.
+
+## 1. Quality gates
+
+Continuous integration rejects a change that does not pass all gates.
+
+| Gate | Rule | Runs |
+|---|---|---|
+| Format | `gofmt` reports no file. | Each change |
+| Static analysis | `go vet` and the linter report nothing. | Each change |
+| Unit tests | All tests pass with the race detector. | Each change |
+| **Coverage** | **Statement coverage is 98% or more for each module, and 95% or more for each package.** | Each change |
+| Conformance | Each store adapter passes the conformance suite against a real store. | Each change |
+| Integration | The integration tests and the acceptance tests pass with each adapter. | Each change |
+| Goroutine leaks | No test leaves a goroutine. | Each change |
+| Chaos | The fault tests pass. | Each day and before a release |
+| Fuzzing | The fuzz targets run for a fixed time and find nothing. | Each day and before a release |
+| Mutation | The mutation score of the critical packages is 90% or more. | Each week and before a release |
+| Benchmarks | No benchmark is worse than its baseline by more than the permitted margin. | Before a release |
+
+No gate has a manual override.
+A change that cannot pass a gate changes the code or the test, not the gate.
+
+The gates for format, static analysis, unit tests, and coverage are active now.
+Each other gate becomes active in the milestone that adds its tests. The [roadmap](roadmap.md) names the milestone.
+
+## 2. Coverage rule
+
+### The numbers
+
+| Scope | Minimum |
+|---|---|
+| Each module, all statements | 98% |
+| Each package | 95% |
+
+The script `scripts/coverage.sh` measures and enforces both numbers.
+Continuous integration runs it for each module.
+
+### How coverage is measured
+
+- The measure is statement coverage from `go test` with `-covermode=atomic` and the race detector.
+- All tests of a module count for all packages of the module (`-coverpkg=./...`).
+- For a store adapter, the profile includes the tests that run against a real store. An adapter cannot reach the minimum with mocks.
+
+### What does not count against coverage
+
+- The `examples` module. Its programs are built and run in continuous integration, but they are not measured.
+
+No other exclusion exists.
+The project has no list of ignored files and no "ignore coverage" markers.
+
+### Code that a test cannot reach
+
+- Code that no test can reach is dead code. Remove it.
+- A branch for an error that "cannot occur" is a decision. Make the error possible to inject, and test it, or remove the branch.
+- The 2% margin is for statements that are too expensive to trigger in a deterministic test. Each such statement is visible in the coverage report. A reviewer must accept it.
+
+### Coverage is necessary, not sufficient
+
+A test can run a line and assert nothing.
+Coverage does not find this problem.
+Three other gates find it:
+
+- **Mutation tests** change the code, for example `>=` to `>`. A test must fail for each change. The state machine, the window, the failure condition, and the synchronizer must have a mutation score of 90% or more.
+- **Requirement traceability.** Each requirement identifier and each acceptance test of the requirements documents has a named test. Section 9 gives the rule.
+- **Property tests** check the invariants with random inputs that no person wrote.
+
+### Scripts in a store
+
+Go coverage cannot measure code that runs in a store, for example a Lua script in Redis.
+For such code, the adapter keeps a list of the branches of each script.
+The conformance suite must contain a test for each branch.
+A review of a script change checks the list.
+
+## 3. Test levels
 
 | Level | Subject | Tools | Needs a real store |
 |---|---|---|---|
-| Unit | State machine, window, configuration validation, classifier, local breaker | `testing`, fake clock | No |
-| Property | Invariants of the state machine with random event sequences | Property-based testing | No |
-| Concurrency | Request path with many goroutines, races between results and snapshot changes | `-race`, goroutine leak detector | No |
+| Unit | Each package: logic, configuration validation, error values | `testing`, fake clock | No |
+| Property | Invariants with random event sequences | Property-based testing | No |
+| Fuzz | Inputs from outside: store responses, configuration values | `go test -fuzz` | No |
+| Concurrency | Request path with many goroutines, races between results and state changes | `-race`, goroutine leak detector | No |
 | Conformance | Each store adapter against the store contract | `store/storetest`, real store in a container | Yes, except in-memory |
 | Integration | Many instances in one process against one store | In-memory adapter, Testcontainers | Both |
+| Acceptance | The acceptance tests of the requirements documents | Real store in a container | Yes |
 | Chaos | Faults of the store and of the dependency | Network fault proxy, container control | Yes |
-| Benchmark | Request path cost and store load | `testing.B` | Both |
+| Benchmark | Cost of the request path and load on the store | `testing.B` | Both |
+| Example | The examples in the documentation compile and give the documented output | Go example tests | No |
 
 Tests that need libraries outside the standard library are in a separate `tests` module.
 The core module keeps a `go.mod` with no dependencies.
 
-## 2. Rules
+## 4. Rules for tests
 
+- Write the test first, where it fits. Then write the code. Then refactor.
 - Unit tests use a fake clock. They do not sleep.
 - Integration tests use short durations and wait for a condition with a deadline. They do not assert on a fixed sleep time.
+- A test that fails sometimes is a defect. Continuous integration does not run a failed test again.
 - Each test creates its own namespace. Tests can run in parallel on one store.
-- Tests assert on observable behavior: the result of `Execute`, the state, the number of calls that reach the dependency, and the state that the store returns.
+- Tests assert on observable behavior: the result of a call, the state, the number of calls that reach the dependency, and the state that the store returns.
 - A fake dependency counts the calls that it receives. Tests of protection assert on this count.
 - Tests of the core use the in-memory adapter. It is a real implementation of the contract, not a mock.
 - A fake store that returns errors or waits is permitted for tests of store faults.
+- Each fix of a defect adds a regression test that fails without the fix.
+- Nobody weakens, deletes, or skips a valid test to make a change pass.
 
-## 3. Unit tests
+## 5. Tests for each policy
+
+Each policy must have tests for these subjects before its release:
+
+| Subject | Content |
+|---|---|
+| Decision | Each path of the decision: permit and each type of rejection. |
+| Configuration | Each validation rule, with a valid value and a value that is not valid. Each default. |
+| Errors | Each error value matches as the documentation says. The error of the call is not changed. |
+| Context | Cancellation before, during, and after the call. Deadline. |
+| Panic | A panic of the call is recorded and raised again. |
+| Concurrency | Many goroutines. No data race. Limits hold exactly under contention. |
+| Lifecycle | `Close` stops all goroutines. Calls after `Close` have a defined result. |
+| Composition | The policy in a pipeline with each other policy that exists. |
+| Observability | Each metric, each log event, and each trace attribute. |
+| Performance | A benchmark of the normal path and an assertion of zero allocations. |
+
+## 6. Circuit breaker: unit tests
 
 | Area | Cases |
 |---|---|
@@ -34,10 +139,12 @@ The core module keeps a `go.mod` with no dependencies.
 | `HALF_OPEN` | Permits the probe limit. Rejects the other calls. Closes at the success threshold. Opens at one failure. |
 | Window | Buckets rotate. Old buckets do not count. Totals are correct at bucket edges. |
 | Classifier | Default rule. Custom rule. Cancellation by the caller is ignored. |
-| Configuration | Each validation rule has a test for a valid value and for a value that is not valid. |
 | Local mode | Entry from each state. Local thresholds. Time limit and each expired policy. Each start policy. |
+| State machine | Each transition T1 to T4. Each invalid transition. Each generation rule G1 to G5. |
 
-## 4. Concurrency tests
+Property tests check the six invariants of the [state machine](circuit-breaker/state-machine.md).
+
+## 7. Circuit breaker: concurrency, conformance, and integration tests
 
 | Case | Expected result |
 |---|---|
@@ -47,8 +154,6 @@ The core module keeps a `go.mod` with no dependencies.
 | A probe result arrives after its lease ended. | The store ignores the result. |
 | Many instances reconcile at the same time with different local states. | All instances end with the same state and generation. |
 | Many goroutines call `Execute` while the snapshot changes. | No data race. Each call gets a result that is valid for one snapshot. |
-
-## 5. Conformance and integration tests
 
 The conformance suite in `store/storetest` checks each rule of the [store contract](stores/README.md).
 Each adapter of the repository runs it against a real instance of its store.
@@ -62,14 +167,7 @@ The integration tests run with each adapter:
 - Cleanup: a state in use stays, and an unused state is removed.
 - For the Redis adapter, Redis Cluster: all keys of one breaker are in one slot.
 
-## 6. Acceptance tests
-
-The [requirements](circuit-breaker/requirements.md) define the acceptance tests AT-1 to AT-7.
-Each acceptance test is one named test.
-It runs against each adapter of the repository.
-The roadmap states the milestone in which each test must pass.
-
-## 7. Chaos tests
+## 8. Circuit breaker: chaos tests
 
 | Fault | Method | Assertions |
 |---|---|---|
@@ -81,19 +179,30 @@ The roadmap states the milestone in which each test must pass.
 | Dependency recovery | The fake dependency succeeds again | One probe. The circuit closes for all instances. |
 | Application restart | Create a new instance during `OPEN` | The new instance reads `OPEN`. It sends no call. |
 
-## 8. Benchmarks
+## 9. Requirement traceability
+
+Each requirement and each acceptance test has an identifier, for example `GEN-3` or `AT-5`.
+
+- The name of an acceptance test contains its identifier, for example `TestAT5_StaleWriterIsRejected`.
+- A test that proves a requirement names the identifier in a subtest name or in the test table.
+- A check in continuous integration reads the identifiers from the requirements documents and fails when an identifier has no test.
+
+This check starts with milestone M1. Until a requirement is implemented, the check reads the list of the identifiers that the completed milestones cover.
+
+## 10. Benchmarks
 
 ### Request path
 
 | Benchmark | Target |
 |---|---|
-| `Execute` in `CLOSED`, one goroutine | Less than 100 ns, 0 allocations |
+| `Execute` on a circuit breaker in `CLOSED`, one goroutine | Less than 100 ns, 0 allocations |
 | `Execute` in `CLOSED`, parallel on all cores | No drop of throughput from contention |
 | `Execute` in `OPEN` | Less than 50 ns, 0 allocations |
 
 These values are targets, not measurements.
 The first measurement becomes the baseline in the repository.
 A later change must not make the baseline worse without a documented reason.
+A test asserts zero allocations with `testing.AllocsPerRun`, so this property is part of the normal test run.
 
 ### System
 
@@ -102,13 +211,18 @@ It runs with the store healthy, unavailable, and recovering.
 It runs for each adapter that shares state between instances.
 It records:
 
-- The latency that the breaker adds to a call, at percentiles 50, 99, and 99.9.
+- The latency that the policy adds to a call, at percentiles 50, 99, and 99.9.
 - The number of store operations each second, for different request rates.
-- The memory for each breaker and the number of goroutines.
+- The memory for each policy instance and the number of goroutines.
 
 The run passes when the store operation rate does not change with the request rate, and when memory and goroutines stay constant during the run.
 
-## 9. Continuous integration
+## 11. Run the tests
 
-Each change runs: build, `go vet`, static analysis, unit tests with `-race`, conformance tests of each adapter, and integration tests.
-Chaos tests and system benchmarks run on a schedule and before a release.
+```sh
+go build ./...
+go vet ./...
+sh scripts/coverage.sh
+```
+
+`scripts/coverage.sh` runs all tests of the module with the race detector, prints the coverage of each package, and fails below the minimum.

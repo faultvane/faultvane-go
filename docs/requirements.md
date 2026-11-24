@@ -96,7 +96,30 @@ The order of this list is the priority order.
 | TK-52 | Lock contention is not a bottleneck under high concurrency. |
 | TK-53 | Each performance statement in the documentation comes from a benchmark in the repository. |
 
-## 4. Out of scope
+## 4. Quality requirements
+
+The library is for production use.
+A user must be able to trust that the code and the documented scenarios are tested.
+[Testing](testing.md) describes how the project satisfies these requirements.
+
+| ID | Requirement |
+|---|---|
+| QA-1 | The statement coverage of each module is 98% or more. |
+| QA-2 | The statement coverage of each package is 95% or more. |
+| QA-3 | Continuous integration measures the coverage for each change and rejects a change below the minimum. No manual override exists. |
+| QA-4 | No source file and no statement is excluded from the coverage measurement, except the example programs. |
+| QA-5 | Each requirement and each acceptance test in the requirements documents has an automated test. A check finds a requirement without a test. |
+| QA-6 | Each policy has unit tests, concurrency tests with the race detector, and tests for goroutine leaks. |
+| QA-7 | Each function with shared state has integration tests against a real store, and tests for each fault of the store. |
+| QA-8 | Each store adapter passes one shared conformance suite. |
+| QA-9 | The critical logic has property tests and mutation tests. The mutation score is 90% or more. |
+| QA-10 | Each input from outside the process has a fuzz test. |
+| QA-11 | Tests are deterministic. A test that fails sometimes is a defect. |
+| QA-12 | Each fix of a defect has a regression test. |
+| QA-13 | Each example in the documentation is compiled and run by the tests. |
+| QA-14 | A release is possible only when all quality gates pass on the release commit. |
+
+## 5. Out of scope
 
 - Service discovery and load balancing.
 - A proxy or a sidecar. Faultvane is a library.
