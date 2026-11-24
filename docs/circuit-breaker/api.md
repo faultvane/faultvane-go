@@ -23,7 +23,7 @@ defer breaker.Close(ctx)
 - `New` validates the configuration. An invalid configuration returns `faultvane.ErrInvalidConfig`.
 - A breaker without a store is a local breaker. It starts no goroutine.
 - A breaker with a store owns one synchronizer goroutine. `breaker.Close` stops it.
-- The store is an adapter. `redisstore` is the Redis adapter. [Stores](stores/README.md) lists the adapters and the contract for a new adapter.
+- The store is an adapter. `redisstore` is the Redis adapter. [Stores](../stores/README.md) lists the adapters and the contract for a new adapter.
 - The application supplies the client of the store, for example the Redis client or the `*sql.DB`. TLS, authentication, and connection timeouts are settings of that client.
 
 ## 2. Run a call
@@ -110,7 +110,7 @@ circuitbreaker.WithClassifier(func(err error) circuitbreaker.Result {
 })
 ```
 
-[Failure detection](circuit-breaker/failure-detection.md) defines the default rule.
+[Failure detection](failure-detection.md) defines the default rule.
 
 ## 5. Read the status
 

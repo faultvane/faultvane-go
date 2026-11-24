@@ -64,7 +64,7 @@ The integration tests run with each adapter:
 
 ## 6. Acceptance tests
 
-The [requirements](requirements.md) define the acceptance tests AT-1 to AT-7.
+The [requirements](circuit-breaker/requirements.md) define the acceptance tests AT-1 to AT-7.
 Each acceptance test is one named test.
 It runs against each adapter of the repository.
 The roadmap states the milestone in which each test must pass.

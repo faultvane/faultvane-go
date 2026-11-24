@@ -123,7 +123,7 @@ The suite contains:
 - Tests for expired leases, with a clock that the suite controls where the store permits it.
 
 An adapter is correct when it passes the suite.
-The acceptance tests AT-1 to AT-6 of the [requirements](../requirements.md) also run against each adapter of the repository.
+The acceptance tests AT-1 to AT-6 of the [requirements](../circuit-breaker/requirements.md) also run against each adapter of the repository.
 
 ## 6. Write your own adapter
 

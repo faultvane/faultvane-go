@@ -18,7 +18,7 @@ Services often have different timeouts and different traffic. One shared failure
 ## 2. Store
 
 Select the store that your application already operates.
-[Stores](stores/README.md) compares the adapters.
+[Stores](../stores/README.md) compares the adapters.
 
 - The request path does not call the store. A slower store gives slower propagation, not slower requests.
 - Put the store near the application. The store timeout default is 100 ms.
@@ -26,7 +26,7 @@ Select the store that your application already operates.
 ### Redis
 
 - A small Redis is sufficient. Each breaker uses three small keys.
-- The breaker keys can share a Redis with other data. Then examine the eviction policy. See [Redis adapter](stores/redis.md).
+- The breaker keys can share a Redis with other data. Then examine the eviction policy. See [Redis adapter](../stores/redis.md).
 - Persistence is not necessary.
 
 ### Load estimate

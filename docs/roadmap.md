@@ -1,10 +1,11 @@
 # Roadmap
 
-This document is the delivery plan of Faultvane for Go.
+This document is the delivery plan of the Faultvane toolkit for Go.
+The toolkit will contain seven policies. The circuit breaker is the first, because it has the most complex design and it defines the model for shared state.
 Each milestone has a scope and exit criteria.
 A milestone is complete only when all its exit criteria are true.
 
-The identifiers refer to the [requirements](requirements.md).
+The identifiers refer to the [toolkit requirements](requirements.md) and the [circuit breaker requirements](circuit-breaker/requirements.md).
 
 ## 1. Overview
 
@@ -26,7 +27,7 @@ flowchart LR
 | Milestone | Result | Status |
 |---|---|---|
 | M0 | Repository, requirements, design, plan | Done |
-| M1 | A correct local circuit breaker with the public API | Planned |
+| M1 | The core of the toolkit and a correct local circuit breaker | Planned |
 | M2 | Shared state and shared failure detection through a store, with the in-memory adapter and the Redis adapter | Planned |
 | M3 | Probes coordinated across instances | Planned |
 | M4 | Local mode, reconciliation, and data loss handling | Planned |
@@ -61,14 +62,14 @@ Exit criteria:
 
 Scope:
 
-- Core package: errors, clock interface, fake clock for tests.
+- Core package: errors, clock interface, fake clock for tests, policy interface, `Combine`, and `Execute`.
 - State machine as pure functions.
 - Local window with atomic counters.
 - `New`, `Execute`, `Do`, `Allow`, and the permit.
 - Classifier and slow call detection.
 - Configuration options and validation.
 
-Requirements: SM-1 to SM-8, FD-1 to FD-5, API-1 to API-5, ERR-1, ERR-2, CFG-1 to CFG-3, PF-4 to PF-6.
+Requirements: TK-1 to TK-6, TK-10 to TK-21, SM-1 to SM-8, FD-1 to FD-5, API-1 to API-5, ERR-1, ERR-2, CFG-1 to CFG-3, PF-4 to PF-6.
 
 Exit criteria:
 
@@ -149,7 +150,7 @@ Requirements: OB-1 to OB-5, SEC-2.
 
 Exit criteria:
 
-- A test asserts each metric and each log event of [observability.md](observability.md).
+- A test asserts each metric and each log event of [observability.md](circuit-breaker/observability.md).
 - A benchmark shows that the request path cost does not change when no observer is installed.
 - A test shows that logs contain no data of a request.
 
@@ -206,6 +207,8 @@ Exit criteria:
 ## 4. Milestones for the other policies
 
 Each policy gets its own requirements and design document before its implementation starts.
+Each policy must satisfy the toolkit requirements TK-1 to TK-53.
+Each milestone ends with a release.
 
 ### M9: Timeout and retry
 
@@ -269,3 +272,4 @@ The owner of the project confirmed these decisions on 2026-11-24.
 | An adapter contains a second implementation of the transitions. | Adapters behave differently. | The conformance suite compares each adapter with the pure state machine. |
 | Tests with real time are not stable. | Slow or flaky continuous integration. | Fake clock in unit tests. Wait for conditions in integration tests. |
 | The scope of seven policies is large. | The first release is late. | The circuit breaker is complete and released before the other policies start. |
+| The policy interface is fixed with only one policy. | A later policy does not fit the interface. | The tests of M1 contain a simple timeout and a simple retry that use the interface. The API can change until version 1.0. |
