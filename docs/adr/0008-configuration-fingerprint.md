@@ -1,6 +1,6 @@
 # ADR 0008: Configuration fingerprint with the last writer in the shared state
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 
