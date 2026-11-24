@@ -698,7 +698,7 @@ func (n retry) Do(ctx context.Context, call func(context.Context) error) error {
 }
 
 func TestPipeline(t *testing.T) {
-	t.Run("TK-2 TK-3 a breaker outside a retry counts one request as one call", func(t *testing.T) {
+	t.Run("TK-2 TK-3 PI-2 a breaker outside a retry counts one request as one call", func(t *testing.T) {
 		b, _ := newTestBreaker(t)
 		pipeline := faultvane.Combine(b, retry(3))
 		target := &dependency{}

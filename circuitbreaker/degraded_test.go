@@ -53,7 +53,7 @@ func TestLocalMode(t *testing.T) {
 		}
 	})
 
-	t.Run("ERR-3 TK-33 a store fault never fails a call", func(t *testing.T) {
+	t.Run("ERR-3 TK-32 TK-33 a store fault never fails a call", func(t *testing.T) {
 		f := newFleet(t, 1, WithFailureThreshold(1000))
 		f.stores[0].down.Store(true)
 		for range 10 {
@@ -424,7 +424,7 @@ func TestStartWithoutStore(t *testing.T) {
 }
 
 func TestReconciliation(t *testing.T) {
-	t.Run("RC-1 RC-3 AT-4 a newer state in the store replaces a local state", func(t *testing.T) {
+	t.Run("RC-1 RC-3 AT-4 TK-34 a newer state in the store replaces a local state", func(t *testing.T) {
 		f := newFleet(t, 2)
 		f.disconnect(0)
 		f.fail(1, 5)
@@ -760,7 +760,7 @@ func TestObservability(t *testing.T) {
 		}
 	})
 
-	t.Run("OB-3 OB-4 the breaker logs transitions and mode changes with their level", func(t *testing.T) {
+	t.Run("OB-3 OB-4 TK-42 TK-43 the breaker logs transitions and mode changes with their level", func(t *testing.T) {
 		var output bytes.Buffer
 		logger := slog.New(slog.NewJSONHandler(&output, &slog.HandlerOptions{Level: slog.LevelDebug}))
 		f := newFleet(t, 1, WithLogger(logger), WithMaxLocalFallbackDuration(time.Minute))
@@ -819,7 +819,7 @@ func TestObservability(t *testing.T) {
 		}
 	})
 
-	t.Run("API-1 a breaker without a store is in local mode", func(t *testing.T) {
+	t.Run("API-1 TK-30 a breaker without a store is in local mode", func(t *testing.T) {
 		b, _ := newTestBreaker(t)
 		if b.Mode() != Local {
 			t.Fatalf("Mode() = %v, want local", b.Mode())

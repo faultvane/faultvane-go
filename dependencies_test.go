@@ -14,7 +14,7 @@ import (
 
 const modulePath = "github.com/faultvane/faultvane-go"
 
-var policyPackages = []string{"circuitbreaker"}
+var policyPackages = []string{"circuitbreaker", "timeout", "retry", "ratelimit", "loadshed"}
 
 func moduleImports(t *testing.T, includeTests bool) map[string][]string {
 	t.Helper()
@@ -52,7 +52,7 @@ func moduleImports(t *testing.T, includeTests bool) map[string][]string {
 }
 
 func TestDependencies(t *testing.T) {
-	t.Run("TK-5 the core module imports only the standard library", func(t *testing.T) {
+	t.Run("TK-5 DS-7 the core module imports only the standard library", func(t *testing.T) {
 		imports := moduleImports(t, true)
 		if len(imports["circuitbreaker"]) == 0 {
 			t.Fatal("the walk found no imports in circuitbreaker")
