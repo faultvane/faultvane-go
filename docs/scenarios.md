@@ -25,7 +25,7 @@ You need Docker and Go.
 sh scripts/scenarios.sh
 ```
 
-A full run takes about one minute after the images exist.
+A full run takes about 70 seconds after the images exist.
 Set `FAULTVANE_SCENARIOS_KEEP=1` to keep the containers after the run.
 
 The workflow `.github/workflows/scenarios.yml` runs the scenarios each day.
@@ -58,6 +58,42 @@ Each scenario runs in all 10 pods at the same time.
 | Load shedding | Maximum 10 in progress. The dependency is slow. 30 calls at the same time. | With low priority, exactly 5 run. With critical priority, exactly 10 run. |
 | All policies together | Load shedding, rate limiter, concurrency limiter, bulkhead, circuit breaker with Redis, retry with a gate and a budget, timeout. The dependency fails, then recovers. | In the outage, all pods open and the dependency gets less than half of the 5000 requests as attempts. After the recovery, all pods close and 1000 calls all succeed. |
 | Each policy alone under load | Each pod makes 1 million calls through one policy. | All calls succeed. The 99th percentile is below 1 ms. |
+
+### Shared rate limit
+
+All 10 pods use a rate limiter with the Redis rate limit store and one name. Thus they share one bucket.
+
+| Setting | Value |
+|---|---|
+| Rate | 500 calls each second |
+| Burst | 50 |
+| Local rate of each pod | 20 calls each second |
+| Local burst of each pod | 2. This is `50 × 20 / 500`. |
+| Load | Each worker of each pod makes one call, waits 1 ms, and makes the next call, for 3 seconds. All pods together make more than 10 times the rate. |
+
+The limits come from the guarantee in the [rate limiter guide](ratelimit/README.md), section 5:
+in a window of `t` seconds, all pods together permit at most `burst + rate × t + H` calls.
+`H` is the number of tokens that the pods hold at the start of the window.
+The test reads the start and the end of a window from the Redis clock, with the Redis command `TIME`.
+The test counts the calls at the dependency.
+
+| Scenario | Steps | Expected result |
+|---|---|---|
+| Ten pods share one rate (RL-39, RL-26) | The test reads the Redis time. Then it configures the pods, and all pods send the load. | The window starts before the first limiter starts, thus `H` is 0. The dependency gets at most `50 + 500 × t` calls and at least `0.7 × 500 × t` calls. The count of the dependency is equal to the number of permitted calls. Each other call gets the rate limit rejection. No call fails. All pods are in distributed mode after the load. |
+| Redis outage (RL-40, RL-27, RL-28) | All pods are in distributed mode. The test stops the Redis container and waits until all pods are in local mode. Then all pods send the load. | The dependency gets from each pod at most `2 + 20 × d` calls and at least `0.7 × 20 × d` calls. `d` is the time of the load in that pod, in seconds, from the clock of the pod. The count of the dependency for each pod is equal to the permitted calls of that pod. Each other call gets the rate limit rejection. No call fails and no call ends with a timeout. Each pod is in local mode and has 3 or more store errors. |
+| Redis recovery (RL-29, RL-26) | The test starts the Redis container. It waits until all pods are in distributed mode and each pod holds at most 1 token. It reads the Redis time and the tokens that the pods hold. Then all pods send the load. | `H` is the sum of the tokens that the pods hold. It is at most 10. The dependency gets at most `50 + 500 × t + H` calls and at least `0.7 × 500 × t` calls. No call fails. All pods are in distributed mode after the load. |
+
+The outage and the recovery are one test.
+
+The lower limit of 70% is the limit of the requirement RL-39. It shows that the pods use the limit and do not only stay below it.
+
+Measured values of 8 runs on the machine of section 5:
+
+| Part | Window | Calls at the dependency | Permitted range for a window of 3.13 s |
+|---|---|---|---|
+| Ten pods share one rate | 3.13 s to 3.16 s | 1509 to 1518 | 1095 to 1615 |
+| Redis outage, each pod | 3.00 s | 61 | 42 to 62 for a window of 3.00 s |
+| Redis recovery, `H` = 10 | 3.13 s to 3.14 s | 1475 to 1513 | 1095 to 1625 |
 
 ## 5. Measured results
 
@@ -100,5 +136,6 @@ On a GitHub runner with 4 cores and 1 worker in each pod, the same scenario gave
 ## 7. Limits
 
 - All containers run on one machine. The network has almost no latency and no loss.
+- The shared rate limit scenarios use one Redis server without cluster mode. The tests of the Redis adapter use a server with cluster mode.
 - A store outage is a stopped container. The scenarios do not test a slow store or a partial partition here. The Redis adapter tests cover a slow store with a proxy.
 - The scenarios module is test equipment. The coverage rule does not apply to it, as for the example programs.

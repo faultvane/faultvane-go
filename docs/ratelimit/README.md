@@ -192,6 +192,7 @@ An instance without calls holds 1 token. An instance with a constant number of c
 
 The property test `TestGuarantee` in `ratelimit/shared_test.go` checks this limit for each window of random sequences of calls and synchronizations.
 The acceptance test RL-39 checks it with 10 limiters and a real Redis.
+The [scenarios in Docker](../scenarios.md) check it with 10 pods in separate containers, also after a Redis outage.
 
 ### Local mode
 
@@ -368,7 +369,7 @@ A token that a call removed does not come back. This is also true when a policy 
 - An instance does not give its tokens back when it stops. `Close` does not call the store. The tokens of a failed synchronization are also lost. The instances then permit fewer calls than the limit.
 - Each instance holds at least 1 token after it got one. When the number of instances is near the burst or above it, the tokens of idle instances are a large part of the burst.
 - In local mode, the instances do not coordinate. The total rate is the sum of the local rates.
-- Only two stores exist: the in-memory store and the Redis store. The Redis store has tests with one Redis server only. It has no test with Redis Cluster.
+- Only two stores exist: the in-memory store and the Redis store. The Redis store has tests with one Redis server without cluster mode and with one Redis server with cluster mode on. It has no test with a cluster of many nodes.
 - The limiter writes no log for a failed synchronization in local mode. `StoreErrors` counts these faults.
 - The observer gets no event for a call. The numbers of permitted and rejected calls come from `Stats`.
 - The limiter does not wait for a token. The application decides what to do after a rejection.

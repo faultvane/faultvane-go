@@ -168,6 +168,7 @@ The error matches `faultvane.ErrStoreUnavailable`. It also matches the error of 
 
 ### Limits
 
-- The tests use one Redis server. No test uses Redis Cluster. The store uses one key for each name, so each operation is in one hash slot.
+- The tests use one Redis server without cluster mode and one Redis server with cluster mode on. The server with cluster mode owns all hash slots. The conformance suite and the key test use it through a cluster client.
+- No test uses a cluster with many nodes, a move of a hash slot, or a failover. The store uses one key for each name, so each operation is in one hash slot.
 - After a failover to a replica that is behind, the bucket can hold older values. The bucket then holds at most `Burst` tokens. The guarantee of the guide starts again from that time.
 - When the Redis clock goes back, the bucket gets no tokens until the clock reaches the stored time again.
