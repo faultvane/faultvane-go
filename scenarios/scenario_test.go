@@ -38,10 +38,11 @@ type status struct {
 	State   string `json:"state"`
 	Mode    string `json:"mode"`
 	Breaker struct {
-		Failures   int64
-		Opened     int64
-		HalfOpened int64
-		Closed     int64
+		Failures         int64
+		LocalModeEntries int64
+		Opened           int64
+		HalfOpened       int64
+		Closed           int64
 	} `json:"breaker"`
 	StoreOperations int64 `json:"storeOperations"`
 	Limit           int   `json:"limit"`
@@ -161,6 +162,10 @@ func (c *cluster) dependencyStats() dependencyStats {
 	var stats dependencyStats
 	c.must(request(http.MethodGet, c.dependency+"/stats", nil, &stats))
 	return stats
+}
+
+func workers() int {
+	return max(1, 2*runtime.NumCPU()/pods)
 }
 
 func namespace() string {
@@ -416,9 +421,9 @@ func TestScenarios(t *testing.T) {
 		t.Run("AT-7 PF-1 PF-3 ten pods under load with "+store, func(t *testing.T) {
 			c.t = t
 			c.mode(http.StatusOK, 0)
-			c.setup(breaker(store, nil))
+			c.setup(breaker(store, map[string]any{"syncMs": 500}))
 			started := time.Now()
-			results := c.loadAll(map[string]any{"calls": 2000000, "concurrency": 4, "local": true})
+			results := c.loadAll(map[string]any{"calls": 2000000, "concurrency": workers(), "local": true})
 			elapsed := time.Since(started).Seconds()
 			calls, worst := 0, result{}
 			for _, r := range results {
@@ -431,8 +436,8 @@ func TestScenarios(t *testing.T) {
 			for i := range c.pods {
 				s := c.status(i)
 				operations += s.StoreOperations
-				if s.Mode != "distributed" || s.State != "closed" {
-					t.Fatalf("pod %d: %s in %s mode after the load", i, s.State, s.Mode)
+				if s.Mode != "distributed" || s.State != "closed" || s.Breaker.LocalModeEntries != 0 {
+					t.Fatalf("pod %d: %s in %s mode after the load, %d changes to local mode", i, s.State, s.Mode, s.Breaker.LocalModeEntries)
 				}
 			}
 			rate := float64(operations) / elapsed / pods
@@ -440,8 +445,8 @@ func TestScenarios(t *testing.T) {
 			if calls != pods*2000000 || worst.P99Us > 1000 {
 				t.Fatalf("calls = %d, worst p99 = %.1fµs, want all calls with a p99 below 1 ms", calls, worst.P99Us)
 			}
-			if rate > 15 {
-				t.Fatalf("%.1f store operations each second for each pod, want at most 15 with a sync interval of 100 ms", rate)
+			if rate > 6 {
+				t.Fatalf("%.1f store operations each second for each pod, want at most 6 with a sync interval of 500 ms", rate)
 			}
 		})
 	}
@@ -590,7 +595,7 @@ func TestScenarios(t *testing.T) {
 		for _, policy := range policies {
 			c.setup(policy.configuration)
 			started := time.Now()
-			results := c.loadAll(map[string]any{"calls": 1000000, "concurrency": 4, "local": true})
+			results := c.loadAll(map[string]any{"calls": 1000000, "concurrency": workers(), "local": true})
 			elapsed := time.Since(started).Seconds()
 			calls, worst := 0, result{}
 			for _, r := range results {

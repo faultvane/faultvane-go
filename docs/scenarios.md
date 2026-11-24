@@ -42,7 +42,7 @@ Each scenario runs four times: with Redis, PostgreSQL, MySQL, and MongoDB.
 | Loss of data in the store (RF-5) | The circuit is open. The test deletes the state in the store. | A pod that starts after the loss reads the open state. The other pods restored it. |
 | Pod restart (RC-6) | The circuit is open. The test restarts one pod container. | The pod reads open at its start. It rejects 5 calls. The dependency gets no call. |
 | Store outage and recovery (AT-3, AT-4, AT-6) | The test stops the store container. All pods make calls. Then the dependency fails for 5 of the pods. Then the test starts the store. | Without the store, all 500 calls succeed and all pods are in local mode. The 5 pods open locally and the other 5 stay closed. After the store is back, all pods are in distributed mode with one state. |
-| Load (AT-7) | Each pod makes 2 million calls with 4 workers through a closed breaker. | All calls succeed. The 99th percentile of each pod is below 1 ms. Each pod makes at most 15 store operations each second. |
+| Load (AT-7) | Each pod makes 2 million calls through a closed breaker with the default sync interval. | All calls succeed. The 99th percentile of each pod is below 1 ms. Each pod makes at most 6 store operations each second. No pod changes to local mode. |
 
 ## 4. Scenarios for the other policies
 
@@ -57,38 +57,44 @@ Each scenario runs in all 10 pods at the same time.
 | Concurrency limiter | Start limit 20, latency threshold 50 ms. The dependency takes 200 ms. | The limit goes down to 3 or less. The dependency never has more than 20 calls in progress from one pod. |
 | Load shedding | Maximum 10 in progress. The dependency is slow. 30 calls at the same time. | With low priority, exactly 5 run. With critical priority, exactly 10 run. |
 | All policies together | Load shedding, rate limiter, concurrency limiter, bulkhead, circuit breaker with Redis, retry with a gate and a budget, timeout. The dependency fails, then recovers. | In the outage, all pods open and the dependency gets less than half of the 5000 requests as attempts. After the recovery, all pods close and 1000 calls all succeed. |
-| Each policy alone under load | Each pod makes 1 million calls with 4 workers through one policy. | All calls succeed. The 99th percentile is below 1 ms. |
+| Each policy alone under load | Each pod makes 1 million calls through one policy. | All calls succeed. The 99th percentile is below 1 ms. |
 
 ## 5. Measured results
 
-Machine: Apple M4, 10 cores, Docker Desktop, 2026-11-24. 10 pods, 4 workers in each pod, a call that does nothing.
+Machine: Apple M4, 10 cores, Docker Desktop, 2026-11-24. 10 pods, 2 workers in each pod, a call that does nothing.
+The number of workers in each pod is two times the number of processor cores divided by the number of pods, and at least 1.
+The breaker uses the default sync interval of 500 ms in the load scenario.
 The percentiles are the values of the slowest pod. They include the two clock reads of the measurement.
 
 | Policy | Store | Calls each second, all pods | p50 | p99 | p99.9 | Store operations each second, each pod |
 |---|---|---|---|---|---|---|
-| Circuit breaker | Redis | 24.9 million | 0.17 µs | 0.88 µs | 4.62 µs | 10.1 |
-| Circuit breaker | PostgreSQL | 28.0 million | 0.17 µs | 0.62 µs | 3.04 µs | 9.1 |
-| Circuit breaker | MySQL | 25.6 million | 0.17 µs | 0.75 µs | 6.75 µs | 8.3 |
-| Circuit breaker | MongoDB | 28.0 million | 0.17 µs | 0.62 µs | 3.54 µs | 9.8 |
-| Circuit breaker | None | 26.8 million | 0.12 µs | 0.50 µs | 4.17 µs | 0 |
-| Bulkhead | None | 38.7 million | 0.08 µs | 0.58 µs | 2.88 µs | 0 |
-| Concurrency limiter | None | 30.3 million | 0.12 µs | 0.54 µs | 2.96 µs | 0 |
-| Rate limiter | None | 34.8 million | 0.12 µs | 0.58 µs | 2.96 µs | 0 |
-| Load shedding | None | 35.6 million | 0.08 µs | 0.58 µs | 3.50 µs | 0 |
-| Retry | None | 48.2 million | 0.04 µs | 0.17 µs | 2.79 µs | 0 |
-| Timeout | None | 14.2 million | 0.38 µs | 2.58 µs | 11.04 µs | 0 |
+| Circuit breaker | Redis | 26.7 million | 0.17 µs | 0.67 µs | 3.12 µs | 2.7 |
+| Circuit breaker | PostgreSQL | 29.6 million | 0.17 µs | 0.58 µs | 2.92 µs | 3.0 |
+| Circuit breaker | MySQL | 29.6 million | 0.17 µs | 0.62 µs | 2.88 µs | 3.0 |
+| Circuit breaker | MongoDB | 30.4 million | 0.17 µs | 0.54 µs | 2.92 µs | 3.0 |
+| Circuit breaker | None | 27.6 million | 0.17 µs | 0.46 µs | 2.92 µs | 0 |
+| Bulkhead | None | 44.6 million | 0.04 µs | 0.38 µs | 1.75 µs | 0 |
+| Concurrency limiter | None | 32.8 million | 0.12 µs | 0.42 µs | 2.88 µs | 0 |
+| Rate limiter | None | 37.3 million | 0.08 µs | 0.38 µs | 2.83 µs | 0 |
+| Load shedding | None | 47.2 million | 0.04 µs | 0.25 µs | 2.12 µs | 0 |
+| Retry | None | 52.5 million | 0.04 µs | 0.12 µs | 1.92 µs | 0 |
+| Timeout | None | 14.1 million | 0.33 µs | 2.54 µs | 7.88 µs | 0 |
 
 What the results show:
 
 - The type of the store does not change the cost of a call. The request path does not use the store.
-- With a sync interval of 100 ms, each pod makes about 10 store operations each second at 2.5 million calls each second. The store load does not follow the request rate.
+- Each pod makes about 3 store operations each second at more than 2.5 million calls each second. The run is shorter than one second, so the first read and the last report increase this value. The store load does not follow the request rate.
+- No pod changes to local mode during the load.
 - All 10 pods share the 10 cores of one machine. The numbers show that the policies are not a bottleneck. They are not a capacity value for a production server.
+
+On a GitHub runner with 4 cores, the same scenario gave about 7 million calls each second for all pods.
 
 ## 6. Defects that the scenarios found
 
 | Defect | Correction |
 |---|---|
 | The rate limiter rejected a few calls with a full bucket under parallel load. A goroutine read the clock, then a different goroutine refilled the bucket with a later time. The first goroutine then calculated a negative refill. | The limiter now uses 0 for a negative elapsed time. A regression test covers it. |
+| On a runner with 4 cores, 40 workers used all processor time. Store operations of the pods then took longer than a store timeout of 80 ms, and a pod changed to local mode. The breaker behaved correctly, but the scenario was not realistic. | The load scenario now uses the default sync interval and a number of workers that fits the machine. It also fails when a pod changes to local mode. |
 | With MongoDB, the first reports of all pods timed out, because the first write created the collection. The breaker does not send a failed report again, so the circuit did not open. | The pod now calls `EnsureIndexes` at setup, as the adapter document says. The adapter document states that this call is necessary before traffic. |
 
 ## 7. Limits
