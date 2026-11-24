@@ -9,9 +9,12 @@ import (
 )
 
 type Limiter struct {
-	cfg      config
-	inFlight atomic.Int64
-	limit    atomic.Uint64
+	cfg       config
+	inFlight  atomic.Int64
+	limit     atomic.Uint64
+	permitted atomic.Int64
+	rejected  atomic.Int64
+	decreases atomic.Int64
 }
 
 var _ faultvane.Policy = (*Limiter)(nil)
@@ -43,6 +46,7 @@ func (l *Limiter) Do(ctx context.Context, call func(context.Context) error) erro
 	err = call(ctx)
 	switch {
 	case l.cfg.overloadIf(err) || l.cfg.isSlowSince(start):
+		l.decreases.Add(1)
 		l.adapt(l.cfg.decreased)
 	case busy:
 		l.adapt(l.cfg.increased)
@@ -55,9 +59,11 @@ func (l *Limiter) acquire() (busy bool, err error) {
 	for {
 		inFlight := l.inFlight.Load()
 		if inFlight >= limit {
+			l.rejected.Add(1)
 			return false, ErrLimitExceeded
 		}
 		if l.inFlight.CompareAndSwap(inFlight, inFlight+1) {
+			l.permitted.Add(1)
 			return 2*(inFlight+1) >= limit, nil
 		}
 	}
