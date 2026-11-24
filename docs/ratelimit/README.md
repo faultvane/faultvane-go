@@ -1,7 +1,8 @@
 # Rate limiter
 
 The rate limiter limits the number of calls that start in a time period.
-It works in one process and keeps its state in local memory.
+Without a store, it works in one process and keeps its state in local memory.
+With a store, the instances of a service share one limit. Section 5 describes this function.
 
 The [requirements](requirements.md) list what the limiter must do. Each requirement has an identifier.
 
@@ -26,7 +27,11 @@ The package is `github.com/faultvane/faultvane-go/ratelimit`.
 | `New(opts ...Option) (*Limiter, error)` | Makes a limiter. It returns an error when the configuration is invalid. |
 | `(*Limiter).Do(ctx, call) error` | Runs the call when a token is available. A `Limiter` is a `faultvane.Policy`. |
 | `(*Limiter).Allow() bool` | Removes one token and returns `true`. It returns `false` when no token is available. |
+| `(*Limiter).Stats() Stats` | Returns the statistics of the limiter. Section 6 describes them. |
+| `(*Limiter).Close(ctx) error` | Stops the synchronizer of a limiter with a store. It does nothing for a limiter without a store. |
 | `ErrRateLimited` | The error of a rejected call. It matches `faultvane.ErrRejected`. |
+| `Store`, `Acquire`, `Grant` | The interface of a shared store and the data of its operation. [Store](store.md) describes them. |
+| `NewMemoryStore(clock) *MemoryStore` | Makes a store in local memory. Use it for tests and for limiters in one process. |
 
 ### Limit a function
 
@@ -88,7 +93,7 @@ When you set only the rate, the burst follows the rate. A rate of 2.5 gives a bu
 1. A new limiter has a full bucket. The first calls, up to the burst, are permitted immediately.
 2. A permitted call removes one token.
 3. A rejected call removes no token.
-4. The bucket gets tokens in proportion to the elapsed time. The limiter calculates the refill when a call arrives. It starts no goroutine and no timer.
+4. The bucket gets tokens in proportion to the elapsed time. The limiter calculates the refill when a call arrives. A limiter without a store starts no goroutine and no timer.
 5. The bucket never holds more tokens than the burst.
 6. A part of a token stays in the bucket. With a rate of 10, one token is available 100 ms after the bucket is empty, and not before that time.
 7. The refill has no drift. The limiter calculates the tokens from the time when the bucket was last full. It does not add small amounts for each call.
@@ -107,7 +112,138 @@ In a period of `t` seconds, the limiter permits at most `burst + rate × t` call
 | Permit short peaks | A burst above the rate |
 | Give calls an equal distance in time | A burst of 1 |
 
-## 5. Interaction with the other policies
+## 5. Shared limit
+
+A limiter with a store shares one bucket with all limiters that use the same store and the same name.
+The bucket is in the store. This document calls it the shared bucket.
+
+```go
+client := redis.NewClient(&redis.Options{Addr: "redis.internal:6379"})
+
+store, err := redisstore.NewRateLimitStore(client, redisstore.WithNamespace("production"))
+if err != nil {
+    return err
+}
+
+limiter, err := ratelimit.New(
+    ratelimit.WithRate(500),
+    ratelimit.WithBurst(50),
+    ratelimit.WithStore(store),
+    ratelimit.WithName("payment-api"),
+    ratelimit.WithLocalRate(50),
+)
+if err != nil {
+    return err
+}
+defer limiter.Close(ctx)
+```
+
+All limiters with one name must have the same rate and the same burst.
+
+### Options
+
+| Option | Default | Valid values | Function |
+|---|---|---|---|
+| `WithStore(store Store)` | No store | Not nil | The store of the shared bucket. |
+| `WithName(name string)` | None. A limiter with a store must have a name. | 1 to 64 characters from `a-z`, `A-Z`, `0-9`, `.`, `_`, `-` | The name of the shared bucket. |
+| `WithSyncInterval(d time.Duration)` | 100 ms | Longer than the store timeout | The time between two synchronizations. |
+| `WithStoreTimeout(d time.Duration)` | 50 ms | Above 0 | The time limit of one store operation. |
+| `WithLocalRate(perSecond float64)` | The rate | Above 0 and at most the rate | The rate of this instance in local mode. |
+| `WithFaultThreshold(n int)` | 3 | 1 or more | The number of failed synchronizations in sequence before local mode. |
+
+A limiter without a store ignores these options.
+
+Set `WithLocalRate` to the rate divided by the number of instances.
+The default is the full rate for each instance. With the default and 10 instances, the dependency can receive 10 times the rate while the store is not available.
+
+### How it works
+
+```mermaid
+flowchart LR
+    subgraph Instance
+        C[Call] --> A[Allowance<br/>local memory]
+        Y[Synchronizer<br/>one goroutine] --> A
+    end
+    Y <-->|one operation in each interval| S[(Shared bucket<br/>in the store)]
+```
+
+1. A call takes one token from the allowance. The allowance is in local memory. A call never calls the store.
+2. When the allowance is empty, the limiter rejects the call.
+3. The synchronizer makes one store operation in each synchronization interval. The number of calls does not change the load on the store.
+4. In each synchronization, the limiter calculates a batch. The batch is two times the number of calls of the last interval. Permitted calls and rejected calls count. The batch is at least 1 and at most the burst.
+5. The limiter asks the store for the tokens that it needs to hold the batch. It gives back the tokens that it holds above the batch. Thus an instance without calls holds one token.
+6. `New` makes the first synchronization. The first batch is the rate multiplied by the synchronization interval, rounded up, and at most the burst.
+7. The store refills the shared bucket with its own clock. The clocks of the instances have no effect on the shared rate.
+
+### Guarantee
+
+`N` is the number of instances. All instances are in distributed mode.
+
+- In each time window of `t` seconds, all instances together permit at most `burst + rate × t + H` calls.
+- `H` is the number of tokens that the instances hold at the start of the window. A token that the store granted in an operation that has not ended is also in `H`.
+- One instance never holds more than its batch, and a batch is never above the burst. Thus `H` is at most `N × burst`.
+- For a window that starts before the first instance starts, `H` is 0. The limit is then `burst + rate × t`, the same as for one limiter without a store.
+
+The reason is as follows. Each token is in the shared bucket or in the allowance of one instance. The shared bucket holds at most `burst` tokens and gets at most `rate × t` new tokens in `t` seconds. A permitted call removes one token. No other operation makes a token.
+
+In usual operation `H` is much smaller than `N × burst`.
+An instance without calls holds 1 token. An instance with a constant number of calls holds at most two times the calls of one synchronization interval.
+
+The property test `TestGuarantee` in `ratelimit/shared_test.go` checks this limit for each window of random sequences of calls and synchronizations.
+The acceptance test RL-39 checks it with 10 limiters and a real Redis.
+
+### Local mode
+
+When the store is not available, the limiter continues with local state.
+
+1. A failed synchronization does not change the mode immediately. The limiter continues to use its allowance.
+2. After `FaultThreshold` failed synchronizations in sequence, the limiter changes to local mode.
+3. In local mode, the limiter uses a local bucket. The rate is `LocalRate`. The local burst is `burst × LocalRate / rate`, rounded up. The limiter keeps the tokens that it holds, up to the local burst.
+4. In local mode, the limiter makes one store operation in each synchronization interval. It makes no other attempts.
+5. The first operation that succeeds returns the limiter to distributed mode. The allowance is then the grant of the store. The limiter does not give tokens of the local bucket to the store.
+6. When the store is not available during `New`, the limiter starts in local mode with a full local bucket.
+7. After `Close`, the limiter is in local mode.
+
+A fault of the store never fails a call and never blocks a call.
+In local mode, one instance permits at most `local burst + LocalRate × t` calls in `t` seconds.
+
+The tokens of a failed synchronization are lost. The instances then permit fewer calls than the limit, never more.
+
+## 6. Statistics and metrics
+
+`Stats` returns a copy of the counters of the limiter.
+
+| Field | Content |
+|---|---|
+| `Mode` | `Distributed` or `Local`. A limiter without a store is always in local mode. |
+| `Permitted` | The number of permitted calls. |
+| `Rejected` | The number of rejected calls. A call that its context stopped is not counted. |
+| `StoreErrors` | The number of failed synchronizations. |
+| `Allowance` | The number of whole tokens that the limiter holds now. The largest value that it shows is 2^62. |
+
+The module `otel` gives these statistics as OpenTelemetry metrics.
+
+```go
+registration, err := faultvaneotel.RegisterRateLimitMetrics(meter, "payment-api", limiter)
+if err != nil {
+    return err
+}
+defer registration.Unregister()
+```
+
+| Metric | Type | Attributes |
+|---|---|---|
+| `faultvane.rate_limiter.calls` | Counter | `faultvane.rate_limiter.decision`: `permitted` or `rejected` |
+| `faultvane.rate_limiter.store_errors` | Counter | None |
+| `faultvane.rate_limiter.mode` | Gauge. 1 for the current mode, 0 for the other mode. | `faultvane.rate_limiter.mode`: `distributed` or `local` |
+| `faultvane.rate_limiter.allowance` | Gauge | None |
+
+Each metric also has the attribute `faultvane.policy.name`. Its value is the name that the application gives to `RegisterRateLimitMetrics`.
+Use a fixed name for each limiter. Do not use a value from a request.
+
+The limiter writes no logs and has no observer. Read the mode from `Stats` or from the metric `faultvane.rate_limiter.mode`.
+
+## 7. Interaction with the other policies
 
 [Policy composition](../policy-composition.md) gives the recommended order of the policies.
 The rate limiter is the second policy from the outside. Load shedding is before it.
@@ -124,11 +260,20 @@ pipeline := faultvane.Combine(shedder, limiter, breaker)
 
 A token that a call removed does not come back. This is also true when a policy inside the limiter rejects the call.
 
-## 6. Limits
+## 8. Limits
 
-- The limit applies to one process. Each instance of a service has its own bucket. With 10 instances and a rate of 100, the dependency can receive 1000 calls each second. A limit that many processes share is a later evaluation.
+- Without a store, the limit applies to one process. Each instance of a service has its own bucket. With 10 instances and a rate of 100, the dependency can receive 1000 calls each second.
+- With a store, the instances can permit more calls than `burst + rate × t` for a short time. Section 5 gives the largest number. The cause is the tokens that the instances hold in local memory.
+- With a store, an instance rejects a call when its allowance is empty, also when the shared bucket holds tokens. This occurs when the number of calls of one instance increases quickly. The next synchronization corrects the batch.
+- With a store, one instance permits at most its allowance at one instant, not the full burst.
+- With a store and more calls than the rate, the instances do not get equal parts of the rate. The instance that synchronizes first gets the tokens.
+- An instance does not give its tokens back when it stops. `Close` does not call the store. The tokens of a failed synchronization are also lost. The instances then permit fewer calls than the limit.
+- Each instance holds at least 1 token after it got one. When the number of instances is near the burst or above it, the tokens of idle instances are a large part of the burst.
+- In local mode, the instances do not coordinate. The total rate is the sum of the local rates.
+- Only two stores exist: the in-memory store and the Redis store. The Redis store has tests with one Redis server only. It has no test with Redis Cluster.
+- The limiter with a store reports the mode only through `Stats` and the metrics. It writes no logs.
 - The limiter does not wait for a token. The application decides what to do after a rejection.
 - A call needs exactly one token. A weight for each call is not available.
 - One limiter has one bucket. For a limit for each client, the application keeps one limiter for each client and sets a limit on the number of limiters.
 - The limiter calculates with 64-bit floating-point numbers. An error of calculation is possible only when the bucket does not become full for more than approximately 10^15 tokens. That error is far below one token in normal use.
-- The limiter protects its bucket with a mutex. The benchmarks in `ratelimit/bench_test.go` measure the cost. A lock-free design was slower with 10 parallel goroutines on the test machine.
+- The limiter protects its bucket with a mutex. The benchmarks in `ratelimit/bench_test.go` measure the cost. A lock-free design was slower with 10 parallel goroutines on the test machine. A limiter with a store uses the same mutex and the same path for a call.
