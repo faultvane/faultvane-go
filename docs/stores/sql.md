@@ -172,3 +172,22 @@ A network between the application and the database adds its round-trip time for 
 - The tests run with PostgreSQL 17 and MySQL 8.4. The project has no test with other versions or with other databases.
 - The data loss handling is the same as for each adapter. When a row is lost, an instance calls `Restore` with its last authoritative snapshot. [Degraded mode](../circuit-breaker/degraded-mode.md) describes it.
 - The adapter has no metrics of its own. `faultvaneotel.InstrumentStore` measures the duration of each operation.
+
+## 9. Acceptance tests
+
+The file `store/sql/acceptance_test.go` runs these acceptance tests of the [requirements](../circuit-breaker/requirements.md) against PostgreSQL and against MySQL.
+
+| Test | Function | Method |
+|---|---|---|
+| AT-3 | `TestAT3_RequestsContinueWithoutTheStore` | The test stops the connection of one instance. The instance changes to local mode. All calls succeed. The local breaker opens after 2 failures. |
+| AT-4 | `TestAT4_ReconciliationKeepsTheNewerState` | The test stops the connection of one instance. A second instance opens the circuit in the database. The test starts the connection again. The first instance takes the state `OPEN` with generation 1. |
+| AT-5 | `TestAT5_StaleWriterIsRejected` | The database has `HALF_OPEN` with generation 100. Two instances get a probe. The probe failure of one instance gives `OPEN` with generation 101. Then the other instance sends a probe success with generation 100. The database keeps `OPEN` with generation 101. |
+| AT-6 | `TestAT6_InstancesConvergeAfterTheOutage` | The test stops the connections of four instances. Two instances open locally and two stay closed. A report through a direct connection opens the circuit in the database. The test starts the connections again. All instances get `OPEN` with generation 1 in distributed mode. |
+
+Each instance has its own connection pool.
+The test gives the driver its own dial function.
+To stop a connection, the test closes all TCP connections of the pool and refuses each new connection.
+The test does not stop the database container.
+
+The tests need the databases of `docker-compose.test.yml`.
+`sh scripts/test-stores.sh` starts them.
