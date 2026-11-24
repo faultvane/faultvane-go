@@ -121,6 +121,7 @@ The library does not trade the correctness of the shared state for more availabi
 | RC-4 | After recovery, all instances converge to one state. The result is deterministic. |
 | RC-5 | Recovery does not cause unnecessary state changes. |
 | RC-6 | An instance that starts does not assume `CLOSED` before it reads the authoritative state or applies the configured start policy. |
+| RC-7 | When the report of a reconciliation fails, the instance stays in local mode and keeps the counts of that report. The instance sends the counts again with the next reconciliation, with the same limits. A failed report in distributed mode is not sent again. |
 
 ### Store faults
 

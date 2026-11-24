@@ -106,6 +106,10 @@ A report that is counted two times can open a circuit for a healthy dependency. 
 The local window still contains the counts.
 If the fault continues, the instance changes to local mode and uses the local window.
 
+This rule applies to a report in distributed mode.
+The report of a reconciliation has a different rule (RC-7): the instance keeps the counts of a failed report and sends them again.
+[Degraded mode](degraded-mode.md) gives the rule and its limits.
+
 ## 6. Configuration differences between instances
 
 The failure condition uses the thresholds of the instance that sends the report.

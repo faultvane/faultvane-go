@@ -37,6 +37,12 @@ func (p *pending) take() counts {
 	return counts{calls: p.calls.Swap(0), failures: p.failures.Swap(0), slowCalls: p.slowCalls.Swap(0)}
 }
 
+func (p *pending) restore(c counts) {
+	p.calls.Add(c.calls)
+	p.failures.Add(c.failures)
+	p.slowCalls.Add(c.slowCalls)
+}
+
 func (b *Breaker) start() {
 	b.wake = make(chan struct{}, 1)
 	b.stop = make(chan struct{})
@@ -227,6 +233,7 @@ func (b *Breaker) recoverStore(ctx context.Context) {
 		c = counts{calls: min(c.calls, calls), failures: min(c.failures, failures), slowCalls: min(c.slowCalls, slowCalls)}
 		if !c.zero() {
 			if snapshot, err = b.cfg.store.Report(ctx, b.name, b.report(auth.Generation, c)); err != nil {
+				b.pending.restore(c)
 				b.counters.storeErrors.Add(1)
 				return
 			}

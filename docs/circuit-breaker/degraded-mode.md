@@ -127,10 +127,13 @@ flowchart TD
     R2 --> Q2{ga > gs?}
     Q2 -- yes --> AD[Adopt A<br/>discard L and pending counts]
     Q2 -- no, equal --> Q3{A is CLOSED?}
-    Q3 -- yes --> RP[Send the limited pending counts as a report<br/>adopt the response]
+    Q3 -- yes --> RP[Send the limited pending counts as a report]
+    RP --> Q4{The report fails?}
+    Q4 -- yes --> KP[Keep the counts<br/>stay in local mode<br/>the next health check starts again]
+    Q4 -- no --> AR[Adopt the response]
     Q3 -- no --> AD2[Adopt A<br/>discard pending counts]
     AD --> DM[Distributed mode]
-    RP --> DM
+    AR --> DM
     AD2 --> DM
 ```
 
@@ -141,6 +144,25 @@ Rules:
 3. **The instance adds only evidence.** When the generation did not change and the authoritative state is `CLOSED`, the instance sends its pending counts. It limits each count to the total that is still in its last local `CLOSED` window. Older counts are not sent. This is a normal report. The store evaluates the failure condition on the sum of all reports. When the limited counts are 0, the instance sends no report.
 4. **Only a probe closes a circuit.** A local `CLOSED` state has no effect on an authoritative `OPEN` or `HALF_OPEN` state.
 5. **Only `Restore` writes a full state, and only an authoritative snapshot.** The store accepts it only when its generation is higher than the stored generation.
+6. **A failed report of a reconciliation is sent again (RC-7).** When the report of rule 3 fails, the instance stays in local mode and puts the counts of the report back into its pending counts. The next successful health check starts the reconciliation again. Rule 3 then applies again to the pending counts, with the same limits.
+
+### A failed report of a reconciliation
+
+The health check and the report of one reconciliation share one store timeout.
+The report can fail although the health check was successful.
+
+Without rule 6, the counts of that report are lost. The instance then adopts `CLOSED` at the next health check, although the instances together had sufficient failures. The state after the outage then depends on the delivery of one report. That is against requirement RC-4.
+
+Rule 6 has a cost. The instance does not know if the store added the counts of a failed report. When the store added them and the response did not arrive, the next report adds the same counts a second time.
+
+- The error is in the safe direction. The shared circuit can open too early. It cannot stay `CLOSED` because of lost counts. A circuit that opened too early closes after one successful probe.
+- Each report has the limit of rule 3. One report that is counted two times adds at most the totals of one local window of one instance. Example: an instance has 3 failures in its local window. The shared window then gets at most 6 failures from this instance, not 3.
+- Each more response that does not arrive adds the same limit one more time. The interval between health checks limits the number of reports in one window.
+- The counts that are too high leave the shared window after one window size.
+- When the first report opened the circuit, the generation changed. The instance then discards its counts and sends no second report. The store also ignores a report with an old generation.
+- A rate does not change when the calls and the failures of one instance are counted two times. The failure count and the minimum number of calls are reached earlier.
+
+A report in distributed mode keeps its rule: the instance does not send it again. [Failure detection](failure-detection.md) gives the reason. In distributed mode, a report that is counted two times can open the circuit of a healthy dependency at each sync interval, and the local window does not limit it.
 
 ### Examples
 
@@ -156,6 +178,7 @@ Rules:
 After reconciliation, each instance holds the authoritative state.
 The authoritative state changes only through atomic operations in a total order.
 The result does not depend on the order in which the instances reconcile, except for the order of their reports, and each report is a valid input of the same state machine.
+The result does not depend on a report that fails, because the instance sends its counts again (rule 6).
 No split-brain condition stays.
 
 ### No flapping

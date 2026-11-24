@@ -574,15 +574,97 @@ func TestReconciliation(t *testing.T) {
 			t.Fatalf("shared window has %d failures, want 4", bucket.Failures)
 		}
 	})
+
+	t.Run("RC-7 RC-4 the counts of a failed reconciliation report open the shared circuit at the next reconciliation", func(t *testing.T) {
+		f := newFleet(t, 0)
+		store := &failsReports{testStore: &testStore{Store: f.memory}}
+		f.addWithStore(store.testStore, WithStore(store))
+		f.add()
+		f.disconnect()
+		f.fail(0, 3)
+		f.fail(1, 3)
+		f.connect(0, 1)
+		store.failReport = true
+		f.sync()
+		if bucket := f.stored().Buckets[0]; bucket.Failures != 3 || f.breakers[0].Mode() != Local {
+			t.Fatalf("shared window has %d failures and instance 0 is in %v mode, want 3 and local", bucket.Failures, f.breakers[0].Mode())
+		}
+		store.failReport = false
+		f.sync()
+		f.assertStored(Open, 1)
+		f.assertAll(Open, Distributed)
+	})
+
+	t.Run("RC-7 RC-5 kept counts that left the window are not sent", func(t *testing.T) {
+		f := newFleet(t, 0, WithFailureThreshold(100), WithLocalFailureThreshold(100))
+		store := &failsReports{testStore: &testStore{Store: f.memory}}
+		f.addWithStore(store.testStore, WithStore(store))
+		f.disconnect()
+		f.fail(0, 4)
+		f.connect(0)
+		store.failReport = true
+		f.sync()
+		store.failReport = false
+		f.clock.Advance(time.Hour)
+		f.fail(0, 1)
+		f.sync()
+		if bucket := f.stored().Buckets[0]; bucket.Calls != 1 || bucket.Failures != 1 {
+			t.Fatalf("shared window = %+v, want only the 1 call that is still in the local window", bucket)
+		}
+	})
+
+	t.Run("RC-7 GEN-3 kept counts are not sent after a transition in the store", func(t *testing.T) {
+		f := newFleet(t, 0)
+		store := &failsReports{testStore: &testStore{Store: f.memory}}
+		f.addWithStore(store.testStore, WithStore(store))
+		f.add()
+		f.disconnect(0)
+		f.fail(0, 4)
+		f.connect(0)
+		store.failReport = true
+		f.sync(0)
+		store.failReport = false
+		f.openAllFrom(1)
+		f.clock.Advance(testOpenDuration)
+		runTimes(t, f.breakers[1], 1, nil)
+		f.assertStored(Closed, 3)
+		f.sync(0)
+		f.sync(0)
+		if stored := f.stored(); stored.State != Closed || stored.Generation != 3 || len(stored.Buckets) != 0 {
+			t.Fatalf("store = %+v, want closed generation 3 with an empty window", stored)
+		}
+		f.assertAll(Closed, Distributed)
+	})
+
+	t.Run("RC-7 a report that the store applied without a response counts two times", func(t *testing.T) {
+		f := newFleet(t, 0, WithFailureThreshold(100), WithLocalFailureThreshold(100))
+		store := &failsReports{testStore: &testStore{Store: f.memory}, applyReport: true}
+		f.addWithStore(store.testStore, WithStore(store))
+		f.disconnect()
+		f.fail(0, 4)
+		f.connect(0)
+		store.failReport = true
+		f.sync()
+		store.failReport = false
+		f.sync()
+		f.sync()
+		if bucket := f.stored().Buckets[0]; bucket.Calls != 8 || bucket.Failures != 8 {
+			t.Fatalf("shared window = %+v, want the 4 failures two times", bucket)
+		}
+	})
 }
 
 type failsReports struct {
 	*testStore
-	failReport bool
+	failReport  bool
+	applyReport bool
 }
 
 func (s *failsReports) Report(ctx context.Context, name string, report Report) (Snapshot, error) {
 	if s.failReport {
+		if s.applyReport {
+			_, _ = s.testStore.Report(ctx, name, report)
+		}
 		return Snapshot{}, errStoreDown
 	}
 	return s.testStore.Report(ctx, name, report)
