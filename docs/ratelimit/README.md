@@ -32,6 +32,7 @@ The package is `github.com/faultvane/faultvane-go/ratelimit`.
 | `ErrRateLimited` | The error of a rejected call. It matches `faultvane.ErrRejected`. |
 | `Store`, `Acquire`, `Grant` | The interface of a shared store and the data of its operation. [Store](store.md) describes them. |
 | `NewMemoryStore(clock) *MemoryStore` | Makes a store in local memory. Use it for tests and for limiters in one process. |
+| `Observer`, `Event`, `EventKind` | The interface and the data of the events. Section 7 describes them. |
 
 ### Limit a function
 
@@ -241,9 +242,106 @@ defer registration.Unregister()
 Each metric also has the attribute `faultvane.policy.name`. Its value is the name that the application gives to `RegisterRateLimitMetrics`.
 Use a fixed name for each limiter. Do not use a value from a request.
 
-The limiter writes no logs and has no observer. Read the mode from `Stats` or from the metric `faultvane.rate_limiter.mode`.
+Section 7 describes the events and the logs for a mode change and for a store fault.
 
-## 7. Interaction with the other policies
+## 7. Events and logs
+
+A limiter with a store has two modes, and its store can fail.
+The limiter reports each mode change and each store fault with an event and with a log record.
+The limiter reports nothing for a call. A call changes only the counters of `Stats`.
+A limiter without a store has no mode change and no store fault. It gives no event and writes no log.
+
+### Options
+
+| Option | Default | Valid values | Function |
+|---|---|---|---|
+| `WithObserver(observer Observer)` | No observer | Not nil | The receiver of the events. |
+| `WithLogger(logger *slog.Logger)` | `slog.Default()` | Not nil | The logger of the package `log/slog` that gets the log records. |
+
+A limiter without a store ignores these options.
+
+```go
+limiter, err := ratelimit.New(
+    ratelimit.WithStore(store),
+    ratelimit.WithName("payment-api"),
+    ratelimit.WithObserver(observer),
+    ratelimit.WithLogger(logger),
+)
+```
+
+### Events
+
+```go
+type Observer interface {
+    Observe(Event)
+}
+```
+
+| Field of `Event` | Content |
+|---|---|
+| `Kind` | `ModeChanged` or `StoreFault` |
+| `Limiter` | The name of the limiter |
+| `Mode` | The mode after the event: `Distributed` or `Local` |
+| `Err` | The error of the store. A change that has no store fault as its cause has `nil`. |
+
+| Kind of event | Text of `Kind.String()` | When |
+|---|---|---|
+| `StoreFault` | `store_fault` | A synchronization fails while the limiter is in distributed mode, or the synchronization of `New` fails. |
+| `ModeChanged` | `mode_changed` | The limiter changes to local mode or to distributed mode. |
+
+Rules:
+
+- A failed synchronization in distributed mode gives one `StoreFault` event. The synchronization that reaches `FaultThreshold` gives a `StoreFault` event and then a `ModeChanged` event. The two events have the mode `Local` and the same error.
+- A failed synchronization in local mode gives no event. It only increases `StoreErrors`.
+- The first synchronization that succeeds in local mode gives one `ModeChanged` event with the mode `Distributed`.
+- When the synchronization of `New` fails, the limiter gives a `StoreFault` event and a `ModeChanged` event with the mode `Local`. When it succeeds, the limiter gives no event.
+- `Close` gives one `ModeChanged` event with the mode `Local` and no error. `Close` of a limiter in local mode gives no event.
+- The limiter calls the observer after it released its lock. The goroutine is the synchronizer, or the caller of `New` or `Close`. A call never waits for the observer.
+- The limiter waits for the observer before the next synchronization. The observer must return quickly.
+- The observer must not call `Close` of the same limiter. `Close` waits for the synchronizer, and the synchronizer waits for the observer.
+- When the observer panics, the limiter recovers and writes an error log. The synchronizer continues.
+- The limiter writes the log of an event before it calls the observer.
+
+### Logs
+
+| Event | Message | Level |
+|---|---|---|
+| Change to local mode after a store fault | `rate limiter mode changed` | `WARN` |
+| Change to local mode by `Close` | `rate limiter mode changed` | `INFO` |
+| Change to distributed mode | `rate limiter mode changed` | `INFO` |
+| Failed synchronization that gives a `StoreFault` event | `rate limiter synchronization failed` | `DEBUG` |
+| The observer panicked | `rate limiter observer panic` | `ERROR` |
+
+| Attribute | Content |
+|---|---|
+| `limiter` | The name of the limiter |
+| `mode` | The mode after the event: `distributed` or `local` |
+| `cause` | The text of the store error. Only a record for an event with an error has it. |
+| `panic` | The value of the panic. Only the record for an observer panic has it. This record has no `mode` and no `cause`. |
+
+The `cause` attribute contains the text of the error from the store adapter. It can contain the address of the store. A store adapter must not put credentials in the text of its errors.
+A store operation gets no data of an application call. Thus a record contains no credentials, no request payloads, and no tokens of a request.
+
+### Number of records in a store outage
+
+Decision: a store fault gives a record only until the limiter is in local mode.
+
+| Period | Records |
+|---|---|
+| Start of the outage | One `DEBUG` record for each failed synchronization, `FaultThreshold` records in total. Then one `WARN` record for the mode change. |
+| Remaining time of the outage | None. |
+| End of the outage | One `INFO` record for the mode change. |
+
+The reasons are as follows:
+
+- The limiter synchronizes 10 times each second with the default interval. One record for each failed synchronization gives 36 000 records for each instance in an outage of one hour. These records contain no new data after the first records.
+- The `WARN` record of the mode change contains the cause. An operator who reads only `WARN` records gets the fault and its effect in one record.
+- `StoreErrors` and the metric `faultvane.rate_limiter.store_errors` count each failed synchronization. Use them to see that the outage continues.
+- The circuit breaker uses the same rule for its health checks in local mode.
+
+The test `TestLogs` in `ratelimit/observe_test.go` makes 1000 failed synchronizations in sequence. It gets 3 `DEBUG` records and 1 `WARN` record.
+
+## 8. Interaction with the other policies
 
 [Policy composition](../policy-composition.md) gives the recommended order of the policies.
 The rate limiter is the second policy from the outside. Load shedding is before it.
@@ -260,7 +358,7 @@ pipeline := faultvane.Combine(shedder, limiter, breaker)
 
 A token that a call removed does not come back. This is also true when a policy inside the limiter rejects the call.
 
-## 8. Limits
+## 9. Limits
 
 - Without a store, the limit applies to one process. Each instance of a service has its own bucket. With 10 instances and a rate of 100, the dependency can receive 1000 calls each second.
 - With a store, the instances can permit more calls than `burst + rate × t` for a short time. Section 5 gives the largest number. The cause is the tokens that the instances hold in local memory.
@@ -271,7 +369,8 @@ A token that a call removed does not come back. This is also true when a policy 
 - Each instance holds at least 1 token after it got one. When the number of instances is near the burst or above it, the tokens of idle instances are a large part of the burst.
 - In local mode, the instances do not coordinate. The total rate is the sum of the local rates.
 - Only two stores exist: the in-memory store and the Redis store. The Redis store has tests with one Redis server only. It has no test with Redis Cluster.
-- The limiter with a store reports the mode only through `Stats` and the metrics. It writes no logs.
+- The limiter writes no log for a failed synchronization in local mode. `StoreErrors` counts these faults.
+- The observer gets no event for a call. The numbers of permitted and rejected calls come from `Stats`.
 - The limiter does not wait for a token. The application decides what to do after a rejection.
 - A call needs exactly one token. A weight for each call is not available.
 - One limiter has one bucket. For a limit for each client, the application keeps one limiter for each client and sets a limit on the number of limiters.
