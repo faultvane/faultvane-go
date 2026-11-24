@@ -324,7 +324,7 @@ Result:
 | Cost of the retry statistics | Each call of the retry policy writes one shared counter. With 10 parallel goroutines and an empty call, one call takes about 51 ns. Before the statistics it took 0.6 ns. A counter for each processor removes this cost but adds code. Examine it again if a profile of a real service shows the retry policy. |
 | Configuration fingerprint | Not implemented. The library does not detect different configurations between instances. |
 | Transition notifications | Not implemented. The Redis adapter does not use Pub/Sub. The sync interval gives the propagation. |
-| Benchmarks | All results come from one Apple M4 machine with the stores in local containers. No result comes from a Linux server that is typical for production. |
+| Benchmarks | The results come from one Apple M4 machine with the stores in local containers, and from one GitHub Linux runner for the core benchmarks. No result comes from a Linux server that is typical for production. The store operations and the system benchmark have no result from Linux in the documents. |
 | Shared rate limit | Only the in-memory store and the Redis store exist. No test uses a Redis Cluster. The Docker scenarios do not include the shared rate limit. The instances do not get equal parts of the limit under overload. |
 | Examples in the documents | Requirement QA-13 is satisfied by the three example programs. No test compiles each code block of the documents. |
 | Documentation comments | The exported names have no documentation comments, because the project forbids comments in code. The package pages of the Go documentation site then show only the signatures. |
