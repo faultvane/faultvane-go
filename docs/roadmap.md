@@ -219,7 +219,7 @@ Result:
 - [x] The fault tests exist as normal tests: a fake store in the core module, and a TCP proxy in the tests of the Redis adapter. They run with each change.
 - [ ] Not done: chaos tests as a separate scheduled gate. No test stops or restarts a store container.
 - [x] Acceptance test **AT-7** passes with the Redis adapter. [Benchmarks](benchmarks.md) records the results. A workflow runs the test each week.
-- [ ] Not done: a run of one hour for memory. The system benchmark runs 1.5 seconds for each row and does not measure memory.
+- [x] A run of one hour shows no growth of the heap and of the goroutines. See [benchmarks](benchmarks.md).
 - [ ] Not done: the system benchmark with the SQL adapter and the MongoDB adapter.
 
 ### M7: Release 0.1.0
@@ -330,7 +330,6 @@ Result:
 | Documentation comments | The exported names have no documentation comments, because the project forbids comments in code. The package pages of the Go documentation site then show only the signatures. |
 | Tests of the adapters | The system benchmark does not run with the SQL adapter and the MongoDB adapter. The Redis adapter has no separate AT-5 test. No test restarts a real store. No test uses a Redis Cluster with many nodes, Redis Sentinel, or a MongoDB replica set. |
 | Counts of a failed report | The breaker does not send a failed report again (FD-7). When the report after an outage fails, the local failure counts are lost and the instance adopts the state of the store. The fleet converges, but the state after the outage depends on the delivery of that report. The Redis test of AT-6 asserts `OPEN` after the outage and can fail for this reason. No failure of it is recorded. |
-| Long run | No run of one hour for memory exists. |
 
 ## 6. Definition of done for the distributed circuit breaker
 
