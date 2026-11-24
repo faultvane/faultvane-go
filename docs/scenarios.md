@@ -87,7 +87,7 @@ What the results show:
 - No pod changes to local mode during the load.
 - All 10 pods share the 10 cores of one machine. The numbers show that the policies are not a bottleneck. They are not a capacity value for a production server.
 
-On a GitHub runner with 4 cores, the same scenario gave about 7 million calls each second for all pods.
+On a GitHub runner with 4 cores and 1 worker in each pod, the same scenario gave about 11 million calls each second for all pods and 2.3 store operations each second for each pod.
 
 ## 6. Defects that the scenarios found
 
