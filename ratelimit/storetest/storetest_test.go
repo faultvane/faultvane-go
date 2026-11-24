@@ -3,6 +3,7 @@ package storetest
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -53,6 +54,18 @@ type grantsAllWanted struct{ *ratelimit.MemoryStore }
 func (s grantsAllWanted) Acquire(ctx context.Context, name string, request ratelimit.Acquire) (ratelimit.Grant, error) {
 	grant, err := s.MemoryStore.Acquire(ctx, name, request)
 	grant.Tokens = request.Wanted
+	return grant, err
+}
+
+type losesOneToken struct{ *ratelimit.MemoryStore }
+
+func (s losesOneToken) Acquire(ctx context.Context, name string, request ratelimit.Acquire) (ratelimit.Grant, error) {
+	grant, err := s.MemoryStore.Acquire(ctx, name, request)
+	if grant.Tokens > 0 {
+		lost := request
+		lost.Wanted, lost.Returned = 1, 0
+		_, _ = s.MemoryStore.Acquire(ctx, name, lost)
+	}
 	return grant, err
 }
 
@@ -167,6 +180,12 @@ func TestTheSuiteRejectsBrokenStores(t *testing.T) {
 					rejected[name] = true
 				}
 			})
+		}
+	})
+	t.Run("RL-21 QA-8 the concurrency check rejects a store that grants less than the bucket holds", func(t *testing.T) {
+		concurrency := checks[len(checks)-1]
+		if problems := concurrency.problems(losesOneToken{memory()}); len(problems) == 0 || !strings.HasPrefix(concurrency.name, "RS1 concurrent") {
+			t.Fatalf("the check %q found no problem", concurrency.name)
 		}
 	})
 	t.Run("RL-21 QA-8 each check rejects a broken store", func(t *testing.T) {
