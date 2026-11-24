@@ -215,9 +215,9 @@ Property tests check the six invariants of the [state machine](circuit-breaker/s
 | Many goroutines call `Execute` while the snapshot changes. | No data race. Each call gets a result that is valid for one snapshot. |
 
 The conformance suite in `circuitbreaker/storetest` checks the rules of the [store contract](stores/README.md).
-Each adapter of the repository runs it against a real instance of its store: Redis, Redis with cluster mode on, PostgreSQL, MySQL, and MongoDB.
+Each adapter of the repository runs it against a real instance of its store: Redis, Redis with cluster mode on, a Redis Cluster of 3 nodes, PostgreSQL, MySQL, and MongoDB.
 
-The conformance suite in `ratelimit/storetest` checks the rules of the [rate limit store](ratelimit/store.md). The in-memory store and the Redis store run it. The Redis store runs it against a real Redis.
+The conformance suite in `ratelimit/storetest` checks the rules of the [rate limit store](ratelimit/store.md). The in-memory store, the Redis store, the SQL store, and the MongoDB store run it. Each adapter runs it against a real store: Redis, a Redis Cluster of 3 nodes, PostgreSQL, MySQL, and MongoDB.
 
 The tests of local mode, reconciliation, and data loss are in the core module. They use the in-memory adapter and a fake store for faults.
 
@@ -252,7 +252,8 @@ No separate scheduled chaos gate exists, and no test stops or restarts a contain
 | Dependency recovery | The fake dependency succeeds again. | Core module, each adapter | One probe. The circuit closes for all instances. |
 | Application restart | The test creates a new instance during `OPEN`. | Core module | The new instance reads `OPEN`. |
 
-Not tested: a restart of a real store container, a failover of Redis Sentinel or of a database, and a cluster with many nodes.
+A Redis Cluster of 3 primary nodes is tested, with breakers on each node, a notification between two nodes, and one slot move.
+Not tested: a restart of a real store container, a failover of Redis Sentinel, of a Redis Cluster, or of a database.
 
 ## 9. Scenarios in Docker
 
@@ -273,7 +274,7 @@ Each requirement and each acceptance test has an identifier, for example `GEN-3`
 
 - The name of an acceptance test contains its identifier, for example `TestAT5_StaleWriterIsRejected`.
 - A test that proves a requirement names the identifier in a subtest name or in the test table.
-- The script `scripts/traceability.sh` runs in continuous integration. It reads `scripts/implemented-requirements.txt`, the list of the requirements that the completed milestones implement. The list has 290 identifiers. It fails when an identifier of the list has no test, or when a test names an identifier that the requirements documents do not define.
+- The script `scripts/traceability.sh` runs in continuous integration. It reads `scripts/implemented-requirements.txt`, the list of the requirements that the completed milestones implement. The list has 301 identifiers. It fails when an identifier of the list has no test, or when a test names an identifier that the requirements documents do not define.
 - A requirement about the documentation or about the process, for example TK-4 or QA-3, has no test in the code. A review checks it.
 
 ## 10. Benchmarks
@@ -329,7 +330,7 @@ The adapter modules need Docker:
 sh scripts/test-stores.sh
 ```
 
-`scripts/test-stores.sh` starts Redis, a Redis with cluster mode on, PostgreSQL, MySQL, and MongoDB from `docker-compose.test.yml`.
+`scripts/test-stores.sh` starts Redis, a Redis with cluster mode on, a Redis Cluster of 3 nodes, PostgreSQL, MySQL, and MongoDB from `docker-compose.test.yml`.
 It runs `scripts/coverage.sh` in each adapter module and then removes the containers.
 The variable `KEEP_STORES=1` keeps the containers. The variable `STORE_MODULES` selects the modules, for example `STORE_MODULES=store/sql`.
 

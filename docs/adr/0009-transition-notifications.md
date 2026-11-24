@@ -71,7 +71,7 @@ Negative:
 - The channel name and the message are data in Redis that other tools can read. After version 1.0 they are a compatibility commitment.
 - With Redis access control lists, the user needs a permission for the channels. Without it, no message goes out, and no signal shows this condition except the statistic `Notifications` and the metric `notifications`, which stay 0.
 - In a Redis Cluster, `PUBLISH` sends each message to all nodes.
-- The tests run against one standalone server and one server with cluster mode on. No test shows the delivery between two nodes of a cluster.
+- A cluster client subscribes on the node that owns the channel, so the publisher and the subscriber are usually on the same node. The tests with a cluster of 3 nodes also prove the delivery between two different nodes.
 - A breaker does not subscribe again after `Subscribe` returned an error. The Redis adapter returns no error for a connection fault, because the client library connects again. A different adapter can need a different rule.
 
 ## Examine again when
