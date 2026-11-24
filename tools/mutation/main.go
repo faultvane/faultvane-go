@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -93,7 +92,17 @@ type runner struct {
 	scratch string
 }
 
-func (r runner) test(index int, m mutant, pattern string) (outcome, error) {
+func (r runner) limit(pattern string) (time.Duration, error) {
+	started := time.Now()
+	command := exec.Command("go", "test", "-count=1", "-timeout", r.timeout.String(), pattern)
+	command.Dir = r.root
+	if output, err := command.CombinedOutput(); err != nil {
+		return 0, fmt.Errorf("the tests of %s fail without a mutant: %w\n%s", pattern, err, output)
+	}
+	return min(r.timeout, 3*time.Since(started)+5*time.Second), nil
+}
+
+func (r runner) test(index int, m mutant, pattern string, limit time.Duration) (outcome, error) {
 	original := filepath.Join(r.root, m.file)
 	source, err := os.ReadFile(original)
 	if err != nil {
@@ -108,16 +117,12 @@ func (r runner) test(index int, m mutant, pattern string) (outcome, error) {
 	if err := os.WriteFile(overlay, content, 0o600); err != nil {
 		return invalid, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
-	defer cancel()
-	command := exec.CommandContext(ctx, "go", "test", "-count=1", "-overlay", overlay, pattern)
+	command := exec.Command("go", "test", "-count=1", "-timeout", limit.String(), "-overlay", overlay, pattern)
 	command.Dir = r.root
 	output, err := command.CombinedOutput()
 	switch {
 	case err == nil:
 		return survived, nil
-	case ctx.Err() != nil:
-		return killed, nil
 	case strings.Contains(string(output), "[build failed]") || strings.Contains(string(output), "[setup failed]"):
 		return invalid, nil
 	}
@@ -169,6 +174,11 @@ func examine(r runner, pkg string, workers int) (report, error) {
 	if err != nil {
 		return report{}, err
 	}
+	pattern := "./" + filepath.ToSlash(pkg) + "/..."
+	limit, err := r.limit(pattern)
+	if err != nil {
+		return report{}, err
+	}
 	result := report{pkg: pkg}
 	var mu sync.Mutex
 	var group sync.WaitGroup
@@ -179,7 +189,7 @@ func examine(r runner, pkg string, workers int) (report, error) {
 		go func() {
 			defer group.Done()
 			for index := range jobs {
-				verdict, err := r.test(index, mutants[index], "./"+filepath.ToSlash(pkg)+"/...")
+				verdict, err := r.test(index, mutants[index], pattern, limit)
 				mu.Lock()
 				switch {
 				case err != nil:
@@ -210,7 +220,7 @@ func run(arguments []string, out io.Writer) int {
 	root := flags.String("dir", ".", "the module directory")
 	minimum := flags.Float64("min", 90, "the minimum mutation score of each package, in percent")
 	workers := flags.Int("workers", 4, "the number of test runs at the same time")
-	timeout := flags.Duration("timeout", 3*time.Minute, "the time limit of one test run")
+	timeout := flags.Duration("timeout", 3*time.Minute, "the maximum time limit of the tests of one mutant")
 	if err := flags.Parse(arguments); err != nil || flags.NArg() == 0 || *workers < 1 {
 		_, _ = fmt.Fprintln(out, "usage: mutation [-dir module] [-min percent] [-workers n] [-timeout duration] package...")
 		return 2

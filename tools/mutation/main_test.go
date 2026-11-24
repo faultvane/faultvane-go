@@ -24,6 +24,37 @@ func Sum(a, b int) int {
 }
 `
 
+const endless = `package sample
+
+func Count(n int) int {
+	total := 0
+	for i := 0; i != n; i = i + 1 {
+		total++
+	}
+	return total
+}
+`
+
+const endlessTest = `package sample
+
+import "testing"
+
+func TestCount(t *testing.T) {
+	if Count(3) != 3 {
+		t.Fatal("Count")
+	}
+}
+`
+
+const failingTest = `package sample
+
+import "testing"
+
+func TestFails(t *testing.T) {
+	t.Fatal("always")
+}
+`
+
 func TestDiscover(t *testing.T) {
 	mutants, err := discover("sample.go", []byte(sample))
 	if err != nil {
@@ -53,10 +84,15 @@ func TestDiscover(t *testing.T) {
 
 func module(t *testing.T, test string) string {
 	t.Helper()
+	return moduleOf(t, sample, test)
+}
+
+func moduleOf(t *testing.T, source, test string) string {
+	t.Helper()
 	dir := t.TempDir()
 	files := map[string]string{
 		"go.mod":                "module sample\n\ngo 1.24\n",
-		"sample/sample.go":      sample,
+		"sample/sample.go":      source,
 		"sample/sample_test.go": test,
 	}
 	for name, content := range files {
@@ -120,6 +156,22 @@ func TestRun(t *testing.T) {
 	t.Run("QA-9 the minimum is configurable", func(t *testing.T) {
 		var out strings.Builder
 		if status := run([]string{"-dir", module(t, weakTest), "-min", "10", "sample"}, &out); status != 0 {
+			t.Fatalf("status %d, output:\n%s", status, out.String())
+		}
+	})
+
+	t.Run("QA-9 a mutant whose tests do not end is killed", func(t *testing.T) {
+		var out strings.Builder
+		status := run([]string{"-dir", moduleOf(t, endless, endlessTest), "sample"}, &out)
+		if status != 0 || !strings.Contains(out.String(), "score 100.0%  killed 2  survived 0  not compiled 0  ok") {
+			t.Fatalf("status %d, output:\n%s", status, out.String())
+		}
+	})
+
+	t.Run("QA-9 tests that fail without a mutant stop the run", func(t *testing.T) {
+		var out strings.Builder
+		status := run([]string{"-dir", moduleOf(t, sample, failingTest), "sample"}, &out)
+		if status != 2 || !strings.Contains(out.String(), "fail without a mutant") {
 			t.Fatalf("status %d, output:\n%s", status, out.String())
 		}
 	})
