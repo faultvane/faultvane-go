@@ -175,7 +175,16 @@ func InstrumentStore(store circuitbreaker.Store, meter metric.Meter) (circuitbre
 	if err != nil {
 		return nil, err
 	}
-	return instrumentedStore{store: store, duration: duration}, nil
+	instrumented := instrumentedStore{store: store, duration: duration}
+	if notifier, ok := store.(circuitbreaker.Notifier); ok {
+		return notifyingStore{instrumentedStore: instrumented, Notifier: notifier}, nil
+	}
+	return instrumented, nil
+}
+
+type notifyingStore struct {
+	instrumentedStore
+	circuitbreaker.Notifier
 }
 
 func (s instrumentedStore) record(ctx context.Context, operation string, started time.Time, err error) {

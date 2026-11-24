@@ -256,7 +256,7 @@ The hash tag in the channel name keeps a later change to `SPUBLISH` possible, be
 
 - Set the option in all instances. An instance without the option publishes no message for its transitions and gets no notification. An older version of the adapter also publishes no message. The sync interval then gives the propagation for these transitions.
 - All instances must use the same Redis for the scripts and for the subscription.
-- A wrapper around the store must pass the method `Subscribe` to the store. `faultvaneotel.InstrumentStore` does not pass it. A breaker with an instrumented store gets no notifications.
+- A wrapper around the store must pass the method `Subscribe` to the store. `faultvaneotel.InstrumentStore` passes it.
 - With Redis access control lists, the user needs the permission for the channels `<prefix>:*`, for example `&faultvane:*`.
 - For each transition, each instance makes one store operation at the same time. Section 13 gives the measured times.
 

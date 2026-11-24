@@ -67,7 +67,7 @@ Negative:
 - The adapter is no longer free of goroutines. The contract rule C12 still applies to the operations.
 - The scripts have a new text. During a rolling deployment, Redis holds the old scripts and the new scripts.
 - The function works fully only when all instances set the option. An instance without the option, and an old version, publish no message for their transitions.
-- A wrapper around the store hides the interface `Notifier` unless it passes `Subscribe` to the store. `faultvaneotel.InstrumentStore` is such a wrapper. A breaker with an instrumented store gets no notifications until that wrapper passes the method.
+- A wrapper around the store hides the interface `Notifier` unless it passes `Subscribe` to the store. `faultvaneotel.InstrumentStore` passes the method.
 - The channel name and the message are data in Redis that other tools can read. After version 1.0 they are a compatibility commitment.
 - With Redis access control lists, the user needs a permission for the channels. Without it, no message goes out, and no signal shows this condition except the statistic `Notifications` that stays 0.
 - In a Redis Cluster, `PUBLISH` sends each message to all nodes.
