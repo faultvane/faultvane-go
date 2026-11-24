@@ -167,7 +167,7 @@ Each module names its minimum Go version in its `go.mod` file.
 | OpenTelemetry | `github.com/faultvane/faultvane-go/otel` | 1.26 | The OpenTelemetry API |
 
 The Go version of an adapter module comes from the client library of its store.
-No release tag exists yet, so `go get` cannot select a version of these modules.
+No release tag exists yet.
 
 ## Contributing
 
