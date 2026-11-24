@@ -146,6 +146,21 @@ func TestBucket(t *testing.T) {
 		}
 	})
 
+	t.Run("RL-6 TK-14 a clock value from before the last refill removes no token", func(t *testing.T) {
+		limiter, clock := newTestLimiter(t, WithRate(1e9), WithBurst(100))
+		stale := clock.Now()
+		clock.Advance(time.Second)
+		if !limiter.Allow() {
+			t.Fatal("Allow() = false with a full bucket")
+		}
+		limiter.mu.Lock()
+		available := limiter.available(stale)
+		limiter.mu.Unlock()
+		if available != 99 {
+			t.Fatalf("available = %v with an old clock value, want 99", available)
+		}
+	})
+
 	t.Run("RL-6 the bucket refills from the elapsed time", func(t *testing.T) {
 		limiter, clock := newTestLimiter(t)
 		assertPermitted(t, limiter, 5)
