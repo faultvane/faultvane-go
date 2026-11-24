@@ -21,7 +21,7 @@ import (
 
 func main() {
 	if err := run(os.Stdout); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
@@ -34,7 +34,7 @@ func run(out io.Writer) error {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
-		fmt.Fprint(w, "receipt")
+		_, _ = fmt.Fprint(w, "receipt")
 	}))
 	defer server.Close()
 
@@ -73,7 +73,7 @@ func run(out io.Writer) error {
 		if err != nil {
 			return "", err
 		}
-		defer response.Body.Close()
+		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode != http.StatusOK {
 			return "", fmt.Errorf("payment service: status %d", response.StatusCode)
 		}
@@ -84,11 +84,11 @@ func run(out io.Writer) error {
 		value, err := faultvane.Execute(context.Background(), pipeline, charge)
 		switch {
 		case err == nil:
-			fmt.Fprintf(out, "%s: %s (circuit %s)\n", label, value, breaker.State())
+			_, _ = fmt.Fprintf(out, "%s: %s (circuit %s)\n", label, value, breaker.State())
 		case errors.Is(err, faultvane.ErrRejected):
-			fmt.Fprintf(out, "%s: rejected without a call (circuit %s)\n", label, breaker.State())
+			_, _ = fmt.Fprintf(out, "%s: rejected without a call (circuit %s)\n", label, breaker.State())
 		default:
-			fmt.Fprintf(out, "%s: failed (circuit %s)\n", label, breaker.State())
+			_, _ = fmt.Fprintf(out, "%s: failed (circuit %s)\n", label, breaker.State())
 		}
 	}
 
