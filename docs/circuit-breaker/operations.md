@@ -28,6 +28,7 @@ Select the store that your application already operates.
 - A small Redis is sufficient. Each breaker uses three small keys.
 - The breaker keys can share a Redis with other data. Then examine the eviction policy. See [Redis adapter](../stores/redis.md).
 - Persistence is not necessary.
+- The option `WithNotifications` of the Redis adapter makes the propagation of a transition faster. Each breaker of each instance then holds one more connection to Redis for its subscription. 100 instances with 5 breakers hold 500 connections for subscriptions. For each transition, each instance makes one store operation at the same time.
 
 ### Load estimate
 
@@ -70,7 +71,7 @@ A probe lease of a stopped instance ends at its end time.
 
 ## 6. Limits to know
 
-- An instance observes a transition at most one sync interval after it occurs. During this time, calls can still reach an unhealthy dependency.
+- An instance observes a transition at most one sync interval after it occurs. During this time, calls can still reach an unhealthy dependency. The transition notifications of the Redis adapter make this time shorter in the usual condition. They do not change the upper limit.
 - In local mode, instances are not coordinated. Each instance has its own probe.
 - After a store failover that loses data, the circuit state can go back to an older authoritative state. The breaker then detects the failure again.
 - The library protects calls that go through a breaker. It cannot protect a dependency from callers that do not use it.

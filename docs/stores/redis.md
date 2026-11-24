@@ -35,11 +35,13 @@ defer breaker.Close(ctx)
 - The client is `nil`.
 - The namespace is not set, or it is not valid.
 - The key prefix is not valid.
+- The subscriber of `WithNotifications` is `nil`.
 
 | Option | Default | Meaning |
 |---|---|---|
 | `WithNamespace(namespace)` | Required | The scope of the breaker names, for example `production`. |
 | `WithKeyPrefix(prefix)` | `faultvane` | The first part of each key. |
+| `WithNotifications(subscriber)` | Off | Transition notifications with Redis Pub/Sub. See section 8. |
 
 ## 2. Keys
 
@@ -144,6 +146,7 @@ Each script reads the time with `TIME` and returns the authoritative state after
 | `restore` | `Restore` | state, generation, transition time, open duration, TTL | Writes the snapshot only when its generation is higher than the stored generation. A key that does not exist has generation 0. Deletes the window and the leases when it writes. Keeps the field `fp`. |
 
 Each transition deletes the window and the leases, and sets `ps` to 0. A transition keeps the field `fp`.
+With the option `WithNotifications`, each transition and each `restore` that writes also publish one message. Section 8 describes it.
 The [state machine](../circuit-breaker/state-machine.md) defines the transitions T1 to T4.
 
 ### Second implementation of the transitions
@@ -175,7 +178,89 @@ Instance B: report → T1 → generation 101, OPEN
 Instance A: report(generation 100) → ignored, response: OPEN, generation 101
 ```
 
-## 8. How the adapter satisfies the contract
+## 8. Transition notifications
+
+Without this function, an instance observes a transition of a different instance at its next synchronization, at most one sync interval later.
+With this function, Redis tells each instance about a transition immediately. The instance then synchronizes immediately.
+[Architecture](../circuit-breaker/architecture.md) gives the rules of the core. [ADR 0009](../adr/0009-transition-notifications.md) records the decision.
+
+The function is off by default. The option `WithNotifications` sets it on:
+
+```go
+client := redis.NewClient(&redis.Options{Addr: "redis.internal:6379"})
+
+store, err := redisstore.New(client,
+    redisstore.WithNamespace("production"),
+    redisstore.WithNotifications(client),
+)
+```
+
+The option is necessary because `New` accepts a `redis.Scripter`, and a `redis.Scripter` cannot subscribe.
+The parameter of the option has the type `redisstore.Subscriber`:
+
+```go
+type Subscriber interface {
+    Subscribe(ctx context.Context, channels ...string) *redis.PubSub
+}
+```
+
+The types `*redis.Client`, `*redis.ClusterClient`, and `*redis.Ring` of `go-redis` implement it. The usual value is the client that `New` gets.
+The store implements the optional interface `circuitbreaker.Notifier`. The breaker finds it and subscribes. The application calls no other function.
+The rate limit store of this module ignores the option.
+
+### Channel and message
+
+Each breaker has one channel:
+
+```text
+<prefix>:{<namespace>:<name>}:cb:transitions
+```
+
+Example: `faultvane:{production:payment-service}:cb:transitions`.
+The channel name obeys the rules of section 2. It has the hash tag of the keys of the breaker.
+
+A script publishes one message when it changes the generation:
+
+| Script | Condition |
+|---|---|
+| `report` | Transition T1 |
+| `acquire_probe` | Transition T2 |
+| `complete_probe` | Transition T3 or T4 |
+| `restore` | The script writes the snapshot |
+
+The message is the new generation as decimal text, for example `8`.
+The message is for a person who examines the channel, for example with `redis-cli`. The breaker does not read it.
+A message means only: "the state of this breaker changed, read it".
+
+The channel name is the fourth key of a script call. A script publishes only when it gets this key.
+With the option off, the adapter sends three keys, and the scripts publish nothing and work as before.
+The scripts publish with `redis.pcall`. When Redis refuses the message, for example because the user has no permission for the channel, the operation is still successful and no message goes out.
+
+### `PUBLISH`, not `SPUBLISH`
+
+The scripts use the command `PUBLISH`.
+The sharded command `SPUBLISH` needs Redis 7.0. The minimum version of the adapter is Redis 6.2.
+In a Redis Cluster, `PUBLISH` sends each message to all nodes of the cluster. A subscriber can then connect to each node. A cluster client subscribes on the node of the slot of the channel name.
+The cost is one message on the cluster bus for each node and each transition. Transitions are rare, so this cost is low.
+The hash tag in the channel name keeps a later change to `SPUBLISH` possible, because a sharded channel must be in the slot of the keys of the script.
+
+### Subscription
+
+- Each breaker of each instance has one subscription. A subscription of `go-redis` uses its own connection to Redis. It does not use a connection of the command pool.
+- The adapter starts one goroutine for each subscription. The client library starts two more. `Close` of the breaker stops them and closes the connection.
+- When the connection stops, the client library connects again and subscribes again. The adapter and the breaker do nothing for this.
+- When Redis is not reachable at the start, `Subscribe` returns no error. The client library connects when Redis is reachable again.
+- Messages that Redis publishes while the connection is down are lost. The instance then observes the transition at its next synchronization.
+
+### Rules for operation
+
+- Set the option in all instances. An instance without the option publishes no message for its transitions and gets no notification. An older version of the adapter also publishes no message. The sync interval then gives the propagation for these transitions.
+- All instances must use the same Redis for the scripts and for the subscription.
+- A wrapper around the store must pass the method `Subscribe` to the store. `faultvaneotel.InstrumentStore` does not pass it. A breaker with an instrumented store gets no notifications.
+- With Redis access control lists, the user needs the permission for the channels `<prefix>:*`, for example `&faultvane:*`.
+- For each transition, each instance makes one store operation at the same time. Section 13 gives the measured times.
+
+## 9. How the adapter satisfies the contract
 
 | Rule | How |
 |---|---|
@@ -188,12 +273,12 @@ Instance A: report(generation 100) → ignored, response: OPEN, generation 101
 | C7 Isolation | The namespace and the name are parts of each key. |
 | C8 Context | The adapter passes the context to the client. The adapter does not retry. |
 | C9 Errors | Each error of the client and each reply that is not valid matches `faultvane.ErrStoreUnavailable`. The message starts with `redisstore:` and the name of the operation. |
-| C10 Cleanup | The TTL of the keys. See section 9. |
+| C10 Cleanup | The TTL of the keys. See section 10. |
 | C11 Data loss is visible | A key that does not exist gives `CLOSED` with generation 0. |
-| C12 No side effects | The adapter has no goroutine, no lock, and no timer. |
+| C12 No side effects | An operation starts no goroutine and holds no lock. The adapter has no timer. With `WithNotifications`, each subscription of a breaker has one goroutine of the adapter. The request path does not use it. |
 | C13 Fingerprint | The field `fp` of the state hash. A script that accepts an event writes the fingerprint of its argument. Each reply contains the value from before the script. |
 
-## 9. TTL
+## 10. TTL
 
 A script that accepts an event sets the same TTL on the three keys.
 A script that ignores an event does not change the TTL.
@@ -214,9 +299,9 @@ The `restore` script uses a fixed TTL of 1 hour. The next accepted write sets th
 | `OPEN` state | The TTL is at least two times the open duration. The state cannot expire before the open duration ends, except after a restore with an open duration above 1 hour. |
 | `HALF_OPEN` state | Each probe script sets the TTL again. Each lease also has its own end time. |
 | A breaker with no traffic | The keys expire after the TTL. This is the cleanup. |
-| An instance still holds a snapshot of an expired state | The instance handles this as data loss. See section 10. |
+| An instance still holds a snapshot of an expired state | The instance handles this as data loss. See section 11. |
 
-## 10. Data loss
+## 11. Data loss
 
 Redis can lose the state through eviction, a restart without persistence, a failover to a replica that is behind, or an expired TTL.
 
@@ -232,17 +317,17 @@ Known limit: after a failover that loses a transition, a new transition can get 
 Each response contains the full state, and an instance always replaces its snapshot with the response.
 The effect is limited to results that are in progress at that time. Probe tokens of the lost state are not valid in the new state.
 
-## 11. Redis deployment
+## 12. Redis deployment
 
 | Topic | Rule |
 |---|---|
 | Version | Redis 6.2 or later, or a compatible server. The tests of the project run with Redis 7 only. |
-| Topology | Standalone and Cluster. The hash tag makes all scripts single-slot. The tests run against one standalone server and against one server with cluster mode on. The project has no test with Sentinel and no test with a cluster of many nodes. |
+| Topology | Standalone and Cluster. The hash tag makes all scripts single-slot. The tests run against one standalone server and against one server with cluster mode on. The project has no test with Sentinel and no test with a cluster of many nodes. For this reason, no test shows that a message goes from one node of a cluster to a subscriber on a different node. |
 | Eviction | Use a policy that does not evict these keys, or accept that eviction is handled as data loss. |
-| Persistence | Not necessary. Section 10 covers the loss of data. |
+| Persistence | Not necessary. Section 11 covers the loss of data. |
 | Security | TLS and authentication are settings of the Redis client that the application supplies. |
 
-## 12. Measured latency
+## 13. Measured latency
 
 | Operation | Time for each operation |
 |---|---|
@@ -252,7 +337,22 @@ The measurement used one client and sequential operations, with Redis in a local
 [Benchmarks](../benchmarks.md) gives the machine and the method.
 A network between the application and Redis adds its round-trip time.
 
-## 13. Limits
+### Propagation time of a transition
 
-- Transition notifications are not implemented. The adapter does not use Pub/Sub. An instance observes a transition at its next synchronization, at most one sync interval later.
+The propagation time is the time from the end of the store operation that makes a transition to the moment when a different instance shows the new state.
+
+| Configuration | Median | Percentile 90 | Maximum |
+|---|---|---|---|
+| With `WithNotifications` | 0.9 ms | 1.2 ms | 43 ms |
+| Without notifications | 300 ms | 470 ms | 490 ms |
+
+The measurement used one instance with the default options (sync interval 500 ms, early report interval 50 ms), an Apple M4 processor, and Redis 7.4 in a local container, on 2026-11-24.
+Each row has two runs of 40 transitions, with a random time of 100 ms to 700 ms between two transitions. The table gives the less favorable value of the two runs.
+The maximum with notifications occurs when the instance synchronized a short time before the notification. The instance then waits for the end of the early report interval.
+The repository contains no test that repeats this measurement.
+
+## 14. Limits
+
+- Transition notifications are off by default. Without the option `WithNotifications`, an instance observes a transition at its next synchronization, at most one sync interval later.
+- With notifications, each breaker of each instance holds one more connection to Redis.
 - The adapter has no metrics of its own. `faultvaneotel.InstrumentStore` measures the duration of each operation. See [observability](../circuit-breaker/observability.md).

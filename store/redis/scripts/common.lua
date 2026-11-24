@@ -27,6 +27,12 @@ local function save(s, ttl)
   redis.call('PEXPIRE', KEYS[3], ttl)
 end
 
+local function notify(s)
+  if KEYS[4] then
+    redis.pcall('PUBLISH', KEYS[4], number(s.gen))
+  end
+end
+
 local function transition(s, to, now, od)
   s.st = to
   s.gen = s.gen + 1
@@ -34,6 +40,7 @@ local function transition(s, to, now, od)
   s.od = od
   s.ps = 0
   redis.call('DEL', KEYS[2], KEYS[3])
+  notify(s)
 end
 
 local function reply(s, now, granted)
