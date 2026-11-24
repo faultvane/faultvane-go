@@ -40,9 +40,13 @@ jobs:
         run: sh scripts/traceability.sh
 
   lint:
-    name: Lint
+    name: Lint (${{ matrix.module }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [".", "store/redis", "store/sql", "store/mongodb", "otel", "examples"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -51,6 +55,7 @@ jobs:
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.15.0
+          working-directory: ${{ matrix.module }}
 
   stores:
     name: Store adapters and integrations
