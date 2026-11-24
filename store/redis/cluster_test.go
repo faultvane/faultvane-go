@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"slices"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -31,9 +32,21 @@ func nodesClient(t *testing.T) *redis.ClusterClient {
 
 func slotRanges(t *testing.T, client *redis.ClusterClient) []redis.ClusterSlot {
 	t.Helper()
-	ranges, err := client.ClusterSlots(context.Background()).Result()
+	shards, err := client.ClusterShards(context.Background()).Result()
 	if err != nil {
 		t.Fatal(err)
+	}
+	var ranges []redis.ClusterSlot
+	for _, shard := range shards {
+		primary := slices.IndexFunc(shard.Nodes, func(node redis.Node) bool { return node.Role == "master" })
+		if primary < 0 {
+			t.Fatalf("the shard %+v has no primary node", shard)
+		}
+		node := shard.Nodes[primary]
+		address := net.JoinHostPort(node.IP, strconv.FormatInt(node.Port, 10))
+		for _, slots := range shard.Slots {
+			ranges = append(ranges, redis.ClusterSlot{Start: int(slots.Start), End: int(slots.End), Nodes: []redis.ClusterNode{{Addr: address}}})
+		}
 	}
 	return ranges
 }
