@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"strings"
 	"testing"
@@ -38,6 +39,13 @@ func TestDefaults(t *testing.T) {
 			t.Error("a result without an ended deadline is an overload signal")
 		}
 	})
+
+	t.Run("CL-26 TK-20 the default logger is the default of log/slog and no observer is set", func(t *testing.T) {
+		c, err := newConfig(nil)
+		if err != nil || c.logger != slog.Default() || c.observer != nil {
+			t.Fatalf("logger = %v, observer = %v, err = %v", c.logger, c.observer, err)
+		}
+	})
 }
 
 func TestOptions(t *testing.T) {
@@ -62,6 +70,14 @@ func TestOptions(t *testing.T) {
 		}
 		if !c.overloadIf(nil) || c.clock != (fixedClock{}) {
 			t.Error("OverloadIf or the clock is not the given value")
+		}
+	})
+
+	t.Run("CL-26 the options set the observer and the logger", func(t *testing.T) {
+		observer := &events{}
+		c, err := newConfig([]Option{WithObserver(observer), WithLogger(quiet)})
+		if err != nil || c.logger != quiet || c.observer != Observer(observer) {
+			t.Fatalf("logger = %v, observer = %v, err = %v", c.logger, c.observer, err)
 		}
 	})
 
@@ -101,6 +117,8 @@ func TestValidation(t *testing.T) {
 		{"backoff ratio not a number", []Option{WithBackoffRatio(math.NaN())}, "BackoffRatio"},
 		{"nil OverloadIf", []Option{WithOverloadIf(nil)}, "OverloadIf"},
 		{"nil clock", []Option{WithClock(nil)}, "Clock"},
+		{"CL-26 nil logger", []Option{WithLogger(nil)}, "Logger"},
+		{"CL-26 nil observer", []Option{WithObserver(nil)}, "Observer"},
 	}
 	for _, c := range cases {
 		t.Run("CL-21 TK-21 "+c.name, func(t *testing.T) {

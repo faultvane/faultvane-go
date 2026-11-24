@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/faultvane/faultvane-go"
@@ -47,4 +48,21 @@ func ExampleWithOverloadIf() {
 		panic(err)
 	}
 	fmt.Println(limiter.Limit(), limiter.InFlight())
+}
+
+type limitPrinter struct{}
+
+func (limitPrinter) Observe(event concurrencylimit.Event) {
+	fmt.Println(event.Kind, event.From, event.To)
+}
+
+func ExampleWithObserver() {
+	limiter, err := concurrencylimit.New(
+		concurrencylimit.WithObserver(limitPrinter{}),
+		concurrencylimit.WithLogger(slog.Default().With("limiter", "search")),
+	)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(limiter.Limit())
 }
