@@ -14,7 +14,7 @@ The rate limiter limits the number of calls that start in a time period.
 ## 2. Scope
 
 Without a store, the rate limiter works in one process. Each limiter keeps its own bucket in local memory.
-With a store, the limiters of many processes share one bucket. Sections 8 to 12 give the requirements for this function.
+With a store, the limiters of many processes share one bucket. Sections 8 to 16 give the requirements for this function.
 
 ## 3. Terms
 
@@ -81,6 +81,7 @@ With a store, the limiters of many processes share one bucket. Sections 8 to 12 
 | RL-23 | A synchronizer in the background makes one store operation in each synchronization interval. The number of store operations does not depend on the number of calls. |
 | RL-24 | In each synchronization, the batch is two times the number of calls of the last interval. Permitted calls and rejected calls count. The batch is at least 1 and at most the burst. The limiter asks the store for the tokens that it needs to hold the batch. It gives back the tokens that it holds above the batch. |
 | RL-25 | `New` makes the first synchronization. The first batch is the rate multiplied by the synchronization interval, rounded up, and at most the burst. |
+| RL-48 | The type `Bucket` contains the calculation of one store operation: the refill, the returned tokens, the limit of the burst, and the grant. It makes no I/O and reads no clock. The time is an argument. The in-memory store, the SQL store, and the MongoDB store use it. |
 | RL-26 | In each time window of `t` seconds, the limiters of one name in distributed mode permit together at most `burst + rate × t + H` calls. `H` is the number of tokens that the limiters hold at the start of the window. One limiter never holds more than its batch. For a window that starts before the first limiter starts, `H` is 0. |
 
 ## 9. Store faults
@@ -134,7 +135,27 @@ With a store, the limiters of many processes share one bucket. Sections 8 to 12 
 | RL-46 | The limiter calls the observer outside its lock, in the goroutine of the synchronizer or of the caller of `New` or `Close`. An observer that does not return blocks no call. When the observer panics, the limiter recovers, writes a log record with the level `ERROR`, and continues. |
 | RL-47 | A call gives no event and no log record. A permitted call and a rejected call make no memory allocation in a limiter with an observer and a logger. |
 
-## 15. Out of scope
+## 15. SQL store
+
+| ID | Requirement |
+|---|---|
+| RL-49 | The SQL store keeps the shared bucket of one name in one row of a table, for PostgreSQL and for MySQL. The default table is `faultvane_rate_limits`. The row holds the tokens and the time of the last operation. One transaction with a row lock makes each operation atomic and uses the time of the database server. Concurrent first operations of a new name grant together exactly the tokens of one full bucket. |
+| RL-50 | A fault of the database returns an error that matches `faultvane.ErrStoreUnavailable`. The error of an operation starts with `sqlstore: rate limit acquire:`. An operation that the database does not commit changes nothing. |
+| RL-51 | Each operation sets the expiry time of the row to the store time plus `StateTTL`. The method `Cleanup` deletes the rows that expired. A successful operation runs the cleanup at most one time in each minute. |
+| RL-52 | Acceptance: 10 limiters under heavy load share one rate through PostgreSQL and through MySQL. The permitted calls stay inside the bound of RL-26 and are at least 70% of the rate multiplied by the time. |
+| RL-53 | Acceptance: when the database is not available, the limiters change to local mode and permit calls at the local rate. When the database is available again, the limiters return to distributed mode. |
+
+## 16. MongoDB store
+
+| ID | Requirement |
+|---|---|
+| RL-54 | The MongoDB store keeps the shared bucket of one name in one document with the identifier `<namespace>:<name>:rl:bucket`. The document holds a version, the tokens, and the time of the last operation. A compare-and-set on the version makes each operation atomic. The store uses the time of the MongoDB server. Concurrent first operations of a new name grant together exactly the tokens of one full bucket. |
+| RL-55 | A fault of MongoDB and a document that is not a bucket return an error that matches `faultvane.ErrStoreUnavailable`. The error of an operation starts with `mongostore: rate limit acquire:`. An operation makes at most 16 attempts. After 16 lost attempts it returns this error and removes no token. |
+| RL-56 | Each operation sets the field `expireAt` of the document to the store time plus `StateTTL`. The method `EnsureIndexes` creates the TTL index `faultvane_expire` on this field. |
+| RL-57 | Acceptance: 10 limiters under heavy load share one rate through MongoDB. The permitted calls stay inside the bound of RL-26 and are at least 70% of the rate multiplied by the time. |
+| RL-58 | Acceptance: when MongoDB is not available, the limiters change to local mode and permit calls at the local rate. When MongoDB is available again, the limiters return to distributed mode. |
+
+## 17. Out of scope
 
 - A call that waits for a token.
 - A call that needs more than one token.

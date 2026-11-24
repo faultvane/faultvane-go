@@ -173,3 +173,10 @@ The test does not stop the MongoDB container.
 
 The tests need the MongoDB of `docker-compose.test.yml`.
 `sh scripts/test-stores.sh` starts it.
+
+## 10. Rate limit store
+
+The module also contains a store for the shared limit of the rate limiter: `mongostore.NewRateLimitStore`.
+It uses the option, the clock, the compare-and-set, and the TTL index of this adapter.
+It keeps one document for each name with the identifier `<namespace>:<name>:rl:bucket`. The document can be in the collection of the circuit breakers.
+The [rate limit store](../ratelimit/store.md) describes the document, the operation, and the limits.
