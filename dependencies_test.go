@@ -14,7 +14,7 @@ import (
 
 const modulePath = "github.com/faultvane/faultvane-go"
 
-var policyPackages = []string{"circuitbreaker", "timeout", "retry", "ratelimit", "loadshed"}
+var policyPackages = []string{"circuitbreaker", "timeout", "retry", "ratelimit", "loadshed", "bulkhead", "concurrencylimit"}
 
 func moduleImports(t *testing.T, includeTests bool) map[string][]string {
 	t.Helper()
