@@ -3,7 +3,7 @@
 The concurrency limiter limits the number of calls that run at the same time for one dependency.
 It adapts the limit to the results of the calls.
 
-Status: implemented in the package `concurrencylimit`. Metrics through the observer are planned.
+Status: implemented in the package `concurrencylimit`. The limiter has no metrics, no logs, and no observer yet.
 
 | Document | Content |
 |---|---|

@@ -235,4 +235,4 @@ go test -run '^$' -bench . -benchmem ./retry
 - When all requests fail and the budget is empty, all goroutines change the same atomic value. The last benchmark shows the cost of this contention.
 - The gate is read before the wait. The state of the application can change during the wait.
 - The policy does not read a wait time that a dependency gives, for example a `Retry-After` header.
-- The policy has no metrics and no logs yet. Observability is planned for all policies.
+- The policy has no metrics, no logs, and no observer yet.
