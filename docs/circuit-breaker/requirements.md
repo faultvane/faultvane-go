@@ -64,6 +64,8 @@ The library does not trade the correctness of the shared state for more availabi
 | DS-7 | The core does not depend on the client library of a store. Each adapter with an external dependency is a separate module. |
 | DS-8 | An application can supply its own adapter. The documentation defines the contract of an adapter. |
 | DS-9 | The shared state contains the configuration fingerprint of the instance that made the last accepted write. A shared state without a fingerprint is valid. |
+| DS-10 | A store adapter can optionally send a notification for each transition. An instance that gets a notification synchronizes with the store and does not wait for the sync interval. An adapter without this function works as before. |
+| DS-11 | A notification is only a signal to synchronize. The instance never changes its state from the content of a notification. A notification that is lost, late, repeated, or false changes no state and no permit decision. The sync interval stays the upper limit of the propagation time. |
 
 ### Generation
 
@@ -107,6 +109,7 @@ The library does not trade the correctness of the shared state for more availabi
 | DG-5 | Local mode has a configurable maximum duration. After that time, a configured policy applies. |
 | DG-6 | Local states can be different between instances during local mode. The documentation states the guarantees for this period. |
 | DG-7 | The behavior is defined and configurable when the store is not available and the instance has no local state. |
+| DG-8 | An instance in local mode ignores notifications. Only the health check of local mode finds that the store is available again. |
 
 ### Recovery and reconciliation
 
@@ -128,6 +131,7 @@ The library does not trade the correctness of the shared state for more availabi
 | RF-3 | The library does not retry store operations without a limit. |
 | RF-4 | A store fault does not use up the request goroutines of the application. |
 | RF-5 | The library handles the loss of store data from eviction, restart, or failover. |
+| RF-6 | A subscription to notifications that fails does not fail the creation of the breaker, and it fails and delays no call. A log and a statistic show the failure. A subscription works again after its connection to the store stopped. |
 
 ### Keys and TTL
 
@@ -135,6 +139,7 @@ The library does not trade the correctness of the shared state for more availabi
 |---|---|
 | KEY-1 | The names of the records in the store are deterministic. |
 | KEY-2 | The key design supports many services, environments, dependencies, and breakers without collisions. |
+| KEY-3 | The name of the notification channel of a breaker is deterministic and obeys the rules of the record names. |
 | TTL-1 | The state in the store has a TTL. Unused state does not stay forever. |
 | TTL-2 | The TTL never deletes the state of a breaker that is in use. |
 
@@ -196,6 +201,7 @@ The library does not trade the correctness of the shared state for more availabi
 | PF-4 | The library is stable under high concurrency. Lock contention is not a bottleneck. |
 | PF-5 | Memory use has a fixed limit for each breaker. |
 | PF-6 | The library leaks no goroutines. |
+| PF-7 | Notifications do not cause a store load without a limit. An instance makes at most one synchronization in each early report interval, for each number of notifications. |
 
 ## 5. Acceptance tests
 

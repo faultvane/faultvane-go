@@ -16,6 +16,10 @@ type Store interface {
 	Restore(ctx context.Context, name string, snapshot Snapshot) (Snapshot, error)
 }
 
+type Notifier interface {
+	Subscribe(ctx context.Context, name string, changed func()) (stop func(), err error)
+}
+
 type Snapshot struct {
 	State        State
 	Generation   uint64

@@ -133,8 +133,9 @@ The default logger is `slog.Default()`. `WithLogger` sets a different logger.
 | A configuration difference starts | `circuit breaker configuration is different from the configuration of the last writer` | `WARN` |
 | A configuration difference ends | `circuit breaker configuration is equal to the configuration of the last writer again` | `INFO` |
 | The observer panicked | `circuit breaker observer panic` | `ERROR` |
+| The subscription to transition notifications failed | `circuit breaker subscription to transition notifications failed` | `WARN` |
 
-Each log, except the log for an observer panic, has these attributes:
+Each log, except the log for an observer panic and the log for a failed subscription, has these attributes:
 
 | Attribute | Content |
 |---|---|
@@ -148,6 +149,8 @@ Each log, except the log for an observer panic, has these attributes:
 | `stored_fingerprint` | The fingerprint that the last response of the store contained. In the log for the end of a difference, it is the fingerprint of this instance or it is empty. Only the two logs for a configuration difference have it. |
 
 The log for an observer panic has the attributes `breaker` and `panic`.
+The log for a failed subscription has the attributes `breaker` and `cause`. The breaker writes it at most one time. No event goes to the observer.
+`Stats().Notifications` and `Stats().SubscribeFailed` show the transition notifications. The OpenTelemetry module does not export these two fields.
 
 Rules:
 

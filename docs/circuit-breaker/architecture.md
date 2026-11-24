@@ -48,7 +48,7 @@ The design has four rules:
 | Window | Lock-free counters of calls, failures, and slow calls in time buckets. | `circuitbreaker/window.go` |
 | Breaker | The public type. It makes the permit decision from the snapshot and records results. | `circuitbreaker/breaker.go`, `permit.go` |
 | Synchronizer | One background goroutine for each breaker that has a store. It sends reports, refreshes the snapshot, detects store faults, and reconciles. | `circuitbreaker/sync.go` |
-| Store interface | Five operations on the shared state. | `circuitbreaker/store.go` |
+| Store interface | Five operations on the shared state. The optional interface `Notifier` for transition notifications. | `circuitbreaker/store.go` |
 | Store adapter | The implementation of the interface for one type of store. | `circuitbreaker/store.go` for in-memory, the modules `store/redis`, `store/sql`, and `store/mongodb` for the others |
 | Conformance suite | The tests that each adapter must pass. | `circuitbreaker/storetest` |
 | Observer, counters, logs | The interface for events, the counters of `Stats`, and the logs with `log/slog`. | `circuitbreaker/observe.go` |
@@ -126,16 +126,65 @@ The synchronizer runs at these times:
 |---|---|---|
 | Sync interval | 500 ms | Send the counts and refresh the snapshot. |
 | A recorded failure | At most one early report each 50 ms | Detect an outage quickly. |
+| A transition notification | At most one synchronization each 50 ms | Observe a transition of a different instance quickly. Only with an adapter that sends notifications. |
 
-No adapter has a faster propagation, for example a notification of each transition. That function is not implemented.
-The sync interval gives the propagation.
+The second and the third trigger use the same signal and the same limit, the early report interval.
+
+### Transition notifications
+
+A transition notification is an optional function of a store adapter.
+Without it, the sync interval gives the propagation.
+Only the Redis adapter has this function, and only when the application sets the option `WithNotifications`. See the [Redis adapter](../stores/redis.md).
+
+The core defines one optional interface:
+
+```go
+type Notifier interface {
+    Subscribe(ctx context.Context, name string, changed func()) (stop func(), err error)
+}
+```
+
+The rules are:
+
+1. When the store of a breaker implements `Notifier`, the synchronizer goroutine calls `Subscribe` one time when it starts. The store timeout limits this call. `Close` calls `stop`.
+2. The adapter calls `changed` after a transition of the breaker with that name. `changed` does not block and does not call the store.
+3. `changed` only wakes the synchronizer. The synchronizer then sends a report or reads the state, as at each other synchronization. The instance gets the state only from the response of the store.
+4. A notification has no content for the core. The breaker never changes its state from a notification.
+5. An instance in local mode ignores a notification. It only counts it. The health check of local mode keeps its increasing interval.
+6. When `Subscribe` returns an error, the breaker writes one `WARN` log and sets `SubscribeFailed` in `Stats`. The breaker does not call `Subscribe` again. It works with the sync interval only.
+
+A notification that is lost, late, repeated, or false is not a problem.
+A lost or late notification gives the propagation delay of the sync interval.
+A repeated or false notification gives one synchronization that changes nothing.
+
+```mermaid
+sequenceDiagram
+    participant I1 as Instance 1
+    participant R as Store
+    participant I2 as Instance 2
+    I1->>R: Report(gen 7, failures 3)
+    Note over R: CLOSED → OPEN, gen 8
+    R-->>I1: OPEN, gen 8
+    R-)I2: notification
+    R-)I1: notification
+    I2->>R: Report or Load
+    R-->>I2: OPEN, gen 8
+    I1->>R: Report or Load
+    R-->>I1: OPEN, gen 8
+```
+
+Cost of a notification:
+
+- Each instance that has a subscription makes one synchronization for one transition. All instances get the notification at the same time. For N instances, the store gets N small operations in a short time for each transition.
+- The instance that made the transition gets the notification also. It makes one synchronization that changes nothing.
+- Many notifications in a short time give at most one synchronization for each instance in each early report interval. In a test with the Redis adapter, 200 transitions in 100 ms gave 2 store operations for each instance, with an early report interval of 50 ms.
 
 ### Limits that result from this design
 
 - **Detection delay.** The circuit opens at most one early-report interval after the shared window reaches the threshold.
-- **Propagation delay.** The other instances observe `OPEN` at most one sync interval later.
+- **Propagation delay.** The other instances observe `OPEN` at most one sync interval later. With transition notifications, the usual delay is the time of one notification and one store operation. When the instance synchronized less than one early report interval before, the instance waits for the end of that interval first. The sync interval stays the upper limit.
 - **Overshoot.** During the propagation delay, an instance can still send calls to the dependency. The sync interval sets the limit of this overshoot.
-- **Store load.** The maximum is one report for each instance and breaker in each early-report interval. With the defaults, 100 instances make at most 2000 small operations each second for a breaker that fails, and 200 for a healthy breaker.
+- **Store load.** The maximum is one report for each instance and breaker in each early-report interval. With the defaults, 100 instances make at most 2000 small operations each second for a breaker that fails, and 200 for a healthy breaker. Notifications do not change this maximum.
 
 The store load does not depend on the request rate of the application.
 The system benchmark measured approximately 2 store operations each second for each instance, at a low and at a high request rate. [Benchmarks](../benchmarks.md) gives the results.

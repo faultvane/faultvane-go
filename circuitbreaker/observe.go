@@ -83,6 +83,8 @@ type Stats struct {
 	Reconciliations  int64
 	LocalModeExpired bool
 	ConfigMismatch   bool
+	Notifications    int64
+	SubscribeFailed  bool
 }
 
 type counters struct {
@@ -102,6 +104,8 @@ type counters struct {
 	reconciliations  atomic.Int64
 	localModeExpired atomic.Bool
 	configMismatch   atomic.Bool
+	notifications    atomic.Int64
+	subscribeFailed  atomic.Bool
 }
 
 func (b *Breaker) Stats() Stats {
@@ -125,6 +129,8 @@ func (b *Breaker) Stats() Stats {
 		Reconciliations:  c.reconciliations.Load(),
 		LocalModeExpired: c.localModeExpired.Load(),
 		ConfigMismatch:   c.configMismatch.Load(),
+		Notifications:    c.notifications.Load(),
+		SubscribeFailed:  c.subscribeFailed.Load(),
 	}
 }
 

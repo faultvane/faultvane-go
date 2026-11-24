@@ -64,6 +64,31 @@ The fingerprint of a snapshot is the configuration fingerprint that the store ha
 The values that an operation needs, for example the thresholds, the window settings, and the state TTL, are fields of its argument.
 The store keeps no configuration.
 
+### Optional interface: transition notifications
+
+An adapter can also implement the interface `Notifier`:
+
+```go
+type Notifier interface {
+    Subscribe(ctx context.Context, name string, changed func()) (stop func(), err error)
+}
+```
+
+The breaker examines its store when it starts. When the store implements `Notifier`, the breaker subscribes.
+The adapter calls `changed` after a transition of the breaker with that name. The breaker then synchronizes and does not wait for the sync interval.
+
+Rules for an adapter:
+
+- `Subscribe` obeys its context and returns quickly. The context applies only to the start of the subscription.
+- `changed` can run in each goroutine. It does not block.
+- After `stop` returns, the adapter does not call `changed` again and holds no goroutine and no connection for the subscription.
+- A notification carries no state. The contract rules C1 to C13 do not depend on it. An adapter that loses, delays, or repeats a notification is still correct.
+- A wrapper around a store must pass `Subscribe` to the store. If it does not, the breaker gets no notifications and uses the sync interval only.
+
+The interface is not a part of `Store`. An adapter without it is complete.
+Only the Redis adapter implements it, as an option. The in-memory, SQL, and MongoDB adapters do not.
+[Architecture](../circuit-breaker/architecture.md) describes the behavior of the breaker. [ADR 0009](../adr/0009-transition-notifications.md) records the decision.
+
 ### The record type
 
 The package `circuitbreaker` exports the type `Record`.
@@ -144,11 +169,13 @@ A store without the first property cannot satisfy C1 and C2. Do not write an ada
 | Logs, events, counters | Core |
 | OpenTelemetry metrics and trace attributes | The module `otel` |
 | The five operations and their atomic behavior | Adapter |
+| The optional transition notifications: the channel, the message, and the connection | Adapter |
+| The reaction to a notification and its rate limit | Core |
 | The data layout in the store and its cleanup | Adapter |
 | The connection, TLS, and authentication | The client that the application supplies |
 
 Degraded mode, reconciliation, and observability work the same with each adapter, because the core owns them.
-An adapter is small. It contains no timers and no goroutines.
+An adapter is small. It contains no timers and no goroutines. The exception is the optional subscription of the Redis adapter: it has one goroutine for each subscription.
 An adapter does not retry a failed operation. The MongoDB adapter repeats its compare-and-set at most 16 times when a different instance wrote first.
 
 ## 5. Conformance tests
@@ -254,6 +281,7 @@ For this reason, the project adds an adapter only when it has users.
 | Clock | The clock that the application gives | Redis server time, microseconds | Database server time, microseconds | MongoDB server time, milliseconds |
 | Cleanup | None. `Delete` removes one breaker. | Key TTL | Delete of expired rows, at most one time each minute after a report | TTL index |
 | Setup step | None | None | `Migrate` | `EnsureIndexes` |
+| Transition notifications | No | Optional, with Pub/Sub | No | No |
 | Measured `Load` | Not measured | Not measured | 0.29 ms (PostgreSQL), 0.26 ms (MySQL) | 0.17 ms |
 | Measured `Report` | Not measured | 0.13 ms | 0.86 ms (PostgreSQL), 2.0 ms (MySQL) | 0.50 ms |
 | Extra infrastructure | None | Redis | The database of the application | MongoDB |

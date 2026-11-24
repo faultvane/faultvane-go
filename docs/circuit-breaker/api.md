@@ -171,6 +171,8 @@ Do not use them to decide if a call is permitted. Use `Allow` for that.
 | `Reconciliations` | The number of reconciliations with the store. |
 | `LocalModeExpired` | `true` while local mode is longer than the maximum time. |
 | `ConfigMismatch` | `true` from the first store response with a different configuration fingerprint until 10 store responses in sequence have no different fingerprint. |
+| `Notifications` | The transition notifications that this instance got from the store adapter. It stays 0 with an adapter that sends no notifications. |
+| `SubscribeFailed` | `true` when the subscription to transition notifications failed. The breaker then uses the sync interval only. |
 
 All counters start at 0 when the application creates the breaker. They only increase.
 [Observability](observability.md) describes how the OpenTelemetry module exports them.
@@ -218,7 +220,7 @@ Rules:
 err := breaker.Close(ctx)
 ```
 
-- `Close` stops the synchronizer goroutine and waits for its end.
+- `Close` stops the synchronizer goroutine and waits for its end. The goroutine stops the subscription to transition notifications, if the store has one.
 - Then, in distributed mode, `Close` synchronizes with the store one time. It sends the pending counts as the last report. The store timeout and the context limit this operation. In local mode, `Close` sends nothing.
 - `Close` returns the context error when the context ends before the goroutine stops. In all other conditions it returns `nil`.
 - `Close` on a breaker without a store does nothing and returns `nil`.

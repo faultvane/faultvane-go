@@ -247,6 +247,29 @@ func (b *Breaker) wakeSynchronizer() {
 	}
 }
 
+func (b *Breaker) notified() {
+	b.counters.notifications.Add(1)
+	if !b.current.Load().local {
+		b.wakeSynchronizer()
+	}
+}
+
+func (b *Breaker) subscribe() func() {
+	notifier, ok := b.cfg.store.(Notifier)
+	if !ok {
+		return func() {}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), b.cfg.storeTimeout)
+	defer cancel()
+	stop, err := notifier.Subscribe(ctx, b.name, b.notified)
+	if err != nil {
+		b.counters.subscribeFailed.Store(true)
+		b.cfg.logger.Warn("circuit breaker subscription to transition notifications failed", "breaker", b.name, "cause", err.Error())
+		return func() {}
+	}
+	return stop
+}
+
 func (b *Breaker) wait(d time.Duration) bool {
 	timer := time.NewTimer(d)
 	defer timer.Stop()
@@ -260,6 +283,8 @@ func (b *Breaker) wait(d time.Duration) bool {
 
 func (b *Breaker) run() {
 	defer close(b.done)
+	unsubscribe := b.subscribe()
+	defer unsubscribe()
 	delay, backoff := b.cfg.syncInterval, b.cfg.syncInterval/2
 	last := time.Now()
 	for {

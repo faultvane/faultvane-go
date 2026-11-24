@@ -39,13 +39,28 @@ var (
 	restoreScript       = redis.NewScript(common + restoreSource)
 )
 
-type Store struct {
-	client    redis.Scripter
-	prefix    string
-	namespace string
+type Subscriber interface {
+	Subscribe(ctx context.Context, channels ...string) *redis.PubSub
 }
 
+type Store struct {
+	client        redis.Scripter
+	prefix        string
+	namespace     string
+	subscriber    Subscriber
+	notifications bool
+}
+
+var _ circuitbreaker.Notifier = (*Store)(nil)
+
 type Option func(*Store)
+
+func WithNotifications(subscriber Subscriber) Option {
+	return func(s *Store) {
+		s.subscriber = subscriber
+		s.notifications = true
+	}
+}
 
 func WithNamespace(namespace string) Option {
 	return func(s *Store) { s.namespace = namespace }
@@ -81,13 +96,41 @@ func New(client redis.Scripter, opts ...Option) (*Store, error) {
 		return nil, fmt.Errorf("%w: Namespace must have 1 to 64 characters from a-z, A-Z, 0-9, '.', '_', '-'", faultvane.ErrInvalidConfig)
 	case !validPart(s.prefix):
 		return nil, fmt.Errorf("%w: KeyPrefix must have 1 to 64 characters from a-z, A-Z, 0-9, '.', '_', '-'", faultvane.ErrInvalidConfig)
+	case s.notifications && s.subscriber == nil:
+		return nil, fmt.Errorf("%w: Notifications must have a subscriber that is not nil", faultvane.ErrInvalidConfig)
 	}
 	return s, nil
 }
 
+func (s *Store) base(name string) string {
+	return s.prefix + ":{" + s.namespace + ":" + name + "}:cb:"
+}
+
 func (s *Store) keys(name string) []string {
-	base := s.prefix + ":{" + s.namespace + ":" + name + "}:cb:"
+	base := s.base(name)
 	return []string{base + "state", base + "window", base + "probes"}
+}
+
+func (s *Store) channel(name string) string {
+	return s.base(name) + "transitions"
+}
+
+func (s *Store) Subscribe(ctx context.Context, name string, changed func()) (func(), error) {
+	if !s.notifications {
+		return func() {}, nil
+	}
+	subscription := s.subscriber.Subscribe(ctx, s.channel(name))
+	messages, done := subscription.Channel(), make(chan struct{})
+	go func() {
+		defer close(done)
+		for range messages {
+			changed()
+		}
+	}()
+	return func() {
+		_ = subscription.Close()
+		<-done
+	}, nil
 }
 
 func micros(d time.Duration) int64 {
@@ -139,7 +182,11 @@ func parse(raw any) (circuitbreaker.Snapshot, bool, error) {
 }
 
 func (s *Store) run(ctx context.Context, operation string, script *redis.Script, name string, args ...any) (circuitbreaker.Snapshot, bool, error) {
-	raw, err := script.Run(ctx, s.client, s.keys(name), args...).Result()
+	keys := s.keys(name)
+	if s.notifications {
+		keys = append(keys, s.channel(name))
+	}
+	raw, err := script.Run(ctx, s.client, keys, args...).Result()
 	if err == nil {
 		var snapshot circuitbreaker.Snapshot
 		var granted bool
