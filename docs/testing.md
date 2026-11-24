@@ -91,6 +91,7 @@ The mutation gate is active. The command is `sh scripts/mutation.sh`. The workfl
 - The tool is `tools/mutation`, a separate module of the repository. It uses only the standard library.
 - The tool changes one operator in one file for each mutant: a comparison (`<`, `<=`, `>`, `>=`, `==`, `!=`), a logical operator (`&&`, `||`), or `+` and `-`. It does not change the text of a string.
 - For each mutant, the tool runs the tests of the package without the race detector. The mutant is killed when a test fails or when the tests do not complete in the time limit.
+- The tool first runs the tests of the package without a mutant. These tests must pass. The time limit for a mutant is 3 times the time of this run plus 5 seconds. The test program ends itself at the limit, so a mutant with a loop that does not end leaves no process.
 - The score of a package is the number of killed mutants divided by the number of mutants that compile.
 - The gate fails when the score of a package is below 90%. The packages are `circuitbreaker`, `timeout`, `retry`, `bulkhead`, `concurrencylimit`, `loadshed`, and `ratelimit`.
 - The tool prints each mutant that survives.
