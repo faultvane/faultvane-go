@@ -3,6 +3,8 @@ package ratelimit
 import (
 	"context"
 	"testing"
+
+	"github.com/faultvane/faultvane-go"
 )
 
 func benchmarkLimiter(b *testing.B, opts ...Option) *Limiter {
@@ -58,4 +60,45 @@ func BenchmarkAllowPermittedParallel(b *testing.B) {
 			_ = limiter.Allow()
 		}
 	})
+}
+
+func benchmarkSharedLimiter(b *testing.B) *Limiter {
+	b.Helper()
+	limiter := benchmarkLimiter(b, WithRate(maxRate), WithStore(NewMemoryStore(faultvane.SystemClock())), WithName("benchmark"))
+	b.Cleanup(func() { _ = limiter.Close(context.Background()) })
+	return limiter
+}
+
+func BenchmarkDoPermittedShared(b *testing.B) {
+	limiter := benchmarkSharedLimiter(b)
+	ctx := context.Background()
+	call := func(context.Context) error { return nil }
+	for b.Loop() {
+		_ = limiter.Do(ctx, call)
+	}
+	if stats := limiter.Stats(); stats.Rejected != 0 || stats.Mode != Distributed {
+		b.Fatalf("stats = %+v, want no rejection in distributed mode", stats)
+	}
+}
+
+func BenchmarkAllowPermittedShared(b *testing.B) {
+	limiter := benchmarkSharedLimiter(b)
+	for b.Loop() {
+		_ = limiter.Allow()
+	}
+	if stats := limiter.Stats(); stats.Rejected != 0 || stats.Mode != Distributed {
+		b.Fatalf("stats = %+v, want no rejection in distributed mode", stats)
+	}
+}
+
+func BenchmarkAllowPermittedSharedParallel(b *testing.B) {
+	limiter := benchmarkSharedLimiter(b)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_ = limiter.Allow()
+		}
+	})
+	if stats := limiter.Stats(); stats.Rejected != 0 || stats.Mode != Distributed {
+		b.Fatalf("stats = %+v, want no rejection in distributed mode", stats)
+	}
 }
