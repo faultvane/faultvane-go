@@ -1,9 +1,12 @@
 # Roadmap
 
-This document is the delivery plan of the Faultvane toolkit for Go.
-The toolkit will contain seven policies. The circuit breaker is the first, because it has the most complex design and it defines the model for shared state.
+This document is the delivery record of the Faultvane toolkit for Go.
+The toolkit contains seven policies. The circuit breaker was the first, because it has the most complex design and it defines the model for shared state.
 Each milestone has a scope and exit criteria.
-A milestone is complete only when all its exit criteria are true.
+
+Status on 2026-11-24: the code of all milestones M1 to M12 is implemented and merged.
+No release tag exists. The release is the decision of the owner of the project.
+Some exit criteria are not satisfied. Each milestone below gives its real result, and section 5 lists the open items.
 
 The identifiers refer to the [toolkit requirements](requirements.md) and the [circuit breaker requirements](circuit-breaker/requirements.md).
 
@@ -25,33 +28,35 @@ flowchart LR
     M11 --> M12[M12 Rate limiter and load shedding]
 ```
 
+The diagram shows the planned order. The real order was different: the work on M8 to M12 did not wait for the release of M7.
+
 | Milestone | Result | Status |
 |---|---|---|
 | M0 | Repository, requirements, design, plan | Done |
-| M1 | The core of the toolkit and a correct local circuit breaker | Done, one open item |
-| M2 | Shared state and shared failure detection through a store, with the in-memory adapter and the Redis adapter | Planned |
-| M3 | Probes coordinated across instances | Planned |
-| M4 | Local mode, reconciliation, and data loss handling | Planned |
-| M5 | Metrics, logs, and traces | Planned |
-| M6 | Chaos tests and benchmarks | Planned |
-| M7 | First release of the distributed circuit breaker | Planned |
-| M8 | SQL adapter | Planned |
-| M9 | MongoDB adapter | Planned |
-| M10 to M12 | The other resilience policies | Planned |
-
-Each milestone delivers working and tested code.
+| M1 | The core of the toolkit and a correct local circuit breaker | Done |
+| M2 | Shared state and shared failure detection through a store, with the in-memory adapter and the Redis adapter | Done |
+| M3 | Probes coordinated across instances | Done |
+| M4 | Local mode, reconciliation, and data loss handling | Done |
+| M5 | Logs, events, counters, and the OpenTelemetry module | Done |
+| M6 | Fault tests and the system benchmark | Done, with open items |
+| M7 | First release of the distributed circuit breaker | Code and documents done. Not released. |
+| M8 | SQL adapter for PostgreSQL and MySQL | Done, with open items |
+| M9 | MongoDB adapter | Done, with open items |
+| M10 | Timeout and retry | Done |
+| M11 | Bulkhead and concurrency limiter | Done |
+| M12 | Rate limiter and load shedding | Done. The distributed rate limiter is not implemented. |
 
 ### Exit criteria for each milestone
 
-These criteria apply to each milestone from M1. The lists below do not repeat them.
+These criteria apply to each milestone from M1.
 
-- All quality gates of [testing.md](testing.md) section 1 pass.
-- The statement coverage is 98% or more for each module and 95% or more for each package (QA-1, QA-2).
-- Each requirement that the milestone names has a test with its identifier (QA-5).
-- Each scenario that the design documents of the milestone describe has a test.
-- The mutation score of the critical packages that the milestone changes is 90% or more (QA-9).
-
-The breaker is usable as a local breaker after M1 and as a distributed breaker after M4.
+| Criterion | Result |
+|---|---|
+| All quality gates of [testing.md](testing.md) section 1 pass. | The active gates pass in continuous integration. The mutation gate and the benchmark comparison are not active. |
+| The statement coverage is 98% or more for each module and 95% or more for each package (QA-1, QA-2). | Continuous integration enforces it for the core module, the three adapter modules, and the `otel` module. |
+| Each requirement that the milestone names has a test with its identifier (QA-5). | 234 of the 251 requirements are in `scripts/implemented-requirements.txt`, and each has a test. The other 17 are requirements about the process, the documentation, or performance targets: QA-1 to QA-7, QA-9 to QA-12, QA-14, SEC-2, TK-4, and TK-51 to TK-53. No test names them. |
+| Each scenario that the design documents of the milestone describe has a test. | Not verified for each scenario. The tests of each milestone exist. |
+| The mutation score of the critical packages that the milestone changes is 90% or more (QA-9). | Measured by hand for M1 only. No mutation run is recorded for the later milestones. |
 
 ## 2. Milestones for the circuit breaker
 
@@ -67,7 +72,7 @@ Scope:
 Exit criteria:
 
 - [x] The documents exist and agree with each other.
-- [x] The owner approved the decisions in section 6.
+- [x] The owner approved the decisions in section 7.
 - [x] The repository has a license.
 - [x] Continuous integration runs build, `go vet`, static analysis, and tests on each change.
 - [x] Continuous integration enforces the coverage minimum of QA-1 and QA-2.
@@ -82,29 +87,21 @@ Scope:
 - `New`, `Execute`, `Do`, `Allow`, and the permit.
 - Classifier and slow call detection.
 - Configuration options and validation.
-- Test infrastructure: property tests, fuzz targets, mutation tests, the goroutine leak check, and the traceability check as gates in continuous integration.
-
-Requirements: QA-1 to QA-6, QA-9 to QA-13, TK-1 to TK-6, TK-10 to TK-21, SM-1 to SM-8, FD-1 to FD-5, API-1 to API-5, ERR-1, ERR-2, CFG-1 to CFG-3, PF-4 to PF-6.
-
-Exit criteria:
-
-- The unit tests of [testing.md](testing.md) section 3 and the property tests of the state machine invariants pass with `-race`.
-- The request path benchmark exists. `Execute` in `CLOSED` makes 0 allocations.
-- The core module has no dependencies.
+- Test infrastructure: property tests, fuzz targets, the goroutine check, and the traceability check.
 
 Result on 2026-11-24:
 
-- [x] All active quality gates pass. The statement coverage is 100% for each package.
-- [x] 40 requirements are in `scripts/implemented-requirements.txt`, and each has a test.
+- [x] All active quality gates pass. The statement coverage was 100% for each package at the end of this milestone.
+- [x] 40 requirements were in `scripts/implemented-requirements.txt` at the end of this milestone, and each had a test.
 - [x] The benchmarks exist. [Benchmarks](benchmarks.md) records the baseline: 83 ns for a call on a closed breaker, with 0 allocations.
-- [x] The core module has no dependencies.
+- [x] The core module has no dependencies. The test `TestDependencies` checks it.
 - [x] The property test and the fuzz target check the six invariants of the state machine.
 - [x] A manual mutation run changed 43 conditions and values in the code. The tests failed for 42. The last change has no effect on the behavior.
-- [ ] Open: the automated mutation gate. It needs an external tool in continuous integration. The tool is not selected yet.
+- [ ] Open: the automated mutation gate. See section 5.
 
 Differences from the plan:
 
-- `ErrStoreUnavailable`, `Mode`, and `Close` are not part of M1. They come with the store in M2.
+- `ErrStoreUnavailable`, `Mode`, and `Close` came with the store in M2.
 - The failure rate condition is always on. The design permitted to turn it off.
 
 ### M2: Shared state
@@ -113,110 +110,138 @@ Scope:
 
 - Store interface with the operations `Load`, `Report`, and `Restore`.
 - In-memory adapter.
-- Conformance suite `store/storetest` for these operations, as a gate in continuous integration with a real store (QA-7, QA-8).
+- Conformance suite for these operations, as a gate in continuous integration with a real store (QA-7, QA-8).
 - Synchronizer: reports, early reports, snapshot replacement, clock difference.
 - Generation rules.
-- Redis adapter module: key schema, scripts `report` and `restore`, TTL rules.
+- Redis adapter module: key schema, scripts, TTL rules.
 
 Requirements: DS-1 to DS-8, GEN-1 to GEN-3, FD-6, FD-7, KEY-1, KEY-2, TTL-1, TTL-2, RF-2, PF-1, PF-3.
 
-Exit criteria:
+Result:
 
-- The in-memory adapter and the Redis adapter pass the conformance suite.
-- Acceptance test **AT-1** passes with each adapter: 10 instances open the circuit together.
-- Acceptance test **AT-5** passes with each adapter: the store ignores a write with an old generation.
-- A test shows that the number of store operations does not change with the request rate.
-- The Redis tests run against Redis standalone and Redis Cluster.
-- The core module still has no dependencies.
+- [x] The in-memory adapter and the Redis adapter pass the conformance suite.
+- [x] Acceptance test **AT-1** passes with each adapter: 10 instances open the circuit together.
+- [x] Acceptance test **AT-5** passes with the in-memory adapter. For each other adapter, the conformance suite has the check "a report with a different generation adds nothing".
+- [x] The system benchmark shows that the number of store operations does not increase with the request rate.
+- [x] The Redis tests run against a standalone Redis and against one Redis server with cluster mode on.
+- [ ] Not done: a test against a Redis Cluster with many nodes.
+- [x] The core module still has no dependencies.
+
+Differences from the plan:
+
+- The in-memory adapter is in the package `circuitbreaker`, not in `store/memory`. The conformance suite is in `circuitbreaker/storetest`, not in `store/storetest`.
+- The state machine is the exported type `Record`. See [ADR 0007](adr/0007-shared-record-for-go-adapters.md).
+- The breaker does not reject a low state TTL. It uses an effective value. See [configuration](circuit-breaker/configuration.md).
+- The configuration fingerprint is not implemented.
 
 ### M3: Probe coordination
 
 Scope:
 
-- Store operations `AcquireProbe` and `CompleteProbe` in the interface, the conformance suite, and the two adapters.
+- Store operations `AcquireProbe` and `CompleteProbe` in the interface, the conformance suite, and the adapters.
 - Probe path on the request path with the attempt flag and the attempt interval.
 - Lease expiry.
-- `HalfOpenMaxProbes` and `HalfOpenSuccessThreshold`.
+- The maximum number of probes and the half-open success threshold.
 
 Requirements: HO-1 to HO-5, SM-4 to SM-6 in distributed mode.
 
-Exit criteria:
+Result:
 
-- Acceptance test **AT-2** passes: exactly one probe with 10 instances.
-- A test shows that a lease of a stopped instance ends and another instance gets it.
-- A test shows that a result with an old token has no effect.
+- [x] Acceptance test **AT-2** passes with each adapter: exactly one probe with 10 instances.
+- [x] The conformance suite shows that a lease ends without an action of its owner and that a later request gets a lease.
+- [x] The conformance suite shows that a result with an unknown token or a different generation has no effect.
 
 ### M4: Degraded mode and reconciliation
 
 Scope:
 
-- Detection of store faults and health checks with backoff.
+- Detection of store faults and health checks with an interval that increases.
 - Local mode from each state.
 - Local thresholds, the time limit, and the expired policies.
 - Start policies.
 - Reconciliation.
-- Data loss detection and `restore`.
+- Data loss detection and `Restore`.
 
 Requirements: DG-1 to DG-7, RC-1 to RC-6, RF-1, RF-3 to RF-5, ERR-3.
 
-Exit criteria:
+Result:
 
-- Acceptance test **AT-3** passes: requests continue without the store.
-- Acceptance test **AT-4** passes: reconciliation without a stale write and without flapping.
-- Acceptance test **AT-6** passes: no split-brain condition after recovery.
-- A test covers each row of the reconciliation table and of the fault matrix in [degraded mode](circuit-breaker/degraded-mode.md).
-- A test shows that no request waits longer than the store timeout during a store fault.
-- The tests of this milestone use a fake store for faults and run with each adapter for recovery. No code of this milestone is in an adapter.
+- [x] Acceptance test **AT-3** passes with the in-memory adapter and with Redis: requests continue without the store.
+- [x] Acceptance test **AT-4** passes with the in-memory adapter and with Redis: reconciliation without a stale write.
+- [x] Acceptance test **AT-6** passes with the in-memory adapter and with Redis: no split-brain condition after recovery.
+- [x] The tests `TestLocalMode`, `TestLocalModeLimit`, `TestStartWithoutStore`, `TestReconciliation`, and `TestDataLoss` cover local mode, reconciliation, and data loss. This document does not verify that a test exists for each row of the tables in [degraded mode](circuit-breaker/degraded-mode.md).
+- [x] A test of the Redis adapter shows that a slow store delays no call.
+- [x] No code of this milestone is in an adapter. The core owns it.
+- [ ] Not done: AT-3, AT-4, and AT-6 with the SQL adapter and the MongoDB adapter.
+
+Differences from the plan:
+
+- No separate random wait exists before reconciliation. The random wait before each health check has this function.
+- A probe that holds a lease from the store when its instance changes to local mode loses its result.
 
 ### M5: Observability
 
 Scope:
 
 - Observer interface and events.
+- Counters with `Stats`.
 - Logs with `log/slog`.
-- OpenTelemetry module with metrics and trace attributes.
+- OpenTelemetry module with metrics, the duration of store operations, and trace attributes.
 
 Requirements: OB-1 to OB-5, SEC-2.
 
-Exit criteria:
+Result:
 
-- A test asserts each metric and each log event of [observability.md](circuit-breaker/observability.md).
-- A benchmark shows that the request path cost does not change when no observer is installed.
-- A test shows that logs contain no data of a request.
+- [x] Tests assert the metrics, the log events, and the trace attributes: `TestObservability` in the core module, and `TestMetrics`, `TestTraced`, and `TestInstrumentStore` in the `otel` module.
+- [x] The request path benchmark after this milestone is 84 ns for a call on a closed breaker. The baseline was 83 ns. See [benchmarks](benchmarks.md).
+- [ ] Not done: a test with the identifier SEC-2. The breaker logs only its name, states, generation, mode, and the text of a store error.
+
+Differences from the plan:
+
+- The metrics do not come from the observer. The `otel` module reads `Stats`.
+- The metrics `stale_writes` and `config_mismatch` do not exist.
+- The traces have no attribute for the generation and no child span for a probe.
+- A failed health check in local mode gives no log and no event. It only increases a counter.
+- Only the circuit breaker has observability. See section 5.
 
 ### M6: Hardening
 
 Scope:
 
-- Chaos tests, as a scheduled gate in continuous integration.
+- Chaos tests.
 - System benchmarks with 1, 10, 50, and 100 instances.
-- Goroutine leak tests and a long run for memory.
-- Corrections of the defects that these tests find.
+- Goroutine checks.
 
 Requirements: PF-1 to PF-6, RF-1.
 
-Exit criteria:
+Result:
 
-- All chaos tests of [testing.md](testing.md) section 7 pass.
-- Acceptance test **AT-7** passes. The benchmark results are in the repository.
-- A run of one hour shows constant memory and a constant number of goroutines.
+- [x] The fault tests exist as normal tests: a fake store in the core module, and a TCP proxy in the tests of the Redis adapter. They run with each change.
+- [ ] Not done: chaos tests as a separate scheduled gate. No test stops or restarts a store container.
+- [x] Acceptance test **AT-7** passes with the Redis adapter. [Benchmarks](benchmarks.md) records the results. A workflow runs the test each week.
+- [ ] Not done: a run of one hour for memory. The system benchmark runs 1.5 seconds for each row and does not measure memory.
+- [ ] Not done: the system benchmark with the SQL adapter and the MongoDB adapter.
 
 ### M7: Release 0.1.0
 
 Scope:
 
-- Example applications: an HTTP client and a gRPC client.
+- Example applications.
 - Documentation update from design to behavior, with measured values.
 - Package documentation and runnable examples.
 - Changelog and version tags for each module.
 
 Requirements: SEC-1, PI-1 as documentation.
 
-Exit criteria:
+Result:
 
-- All acceptance tests AT-1 to AT-7 pass in continuous integration.
-- The definition of done in section 5 is true.
-- The examples run with one command.
+- [x] Two example programs exist: `examples/pipeline` with an HTTP client, and `examples/shared` with five instances and Redis. Each has a test of its output. Each runs with `go run`.
+- [ ] Not done: an example with a gRPC client.
+- [x] The documents describe the implemented behavior and the measured values.
+- [ ] Not done: package documentation. See section 5.
+- [x] The changelog lists the content under `[Unreleased]`.
+- [ ] Not done: version tags. No release exists.
+- [x] The acceptance tests AT-1 to AT-6 pass in continuous integration. AT-7 runs in a scheduled workflow.
 
 ## 3. Milestones for more store adapters
 
@@ -228,11 +253,13 @@ Scope:
 - Adapter module on `database/sql`.
 - Tests with PostgreSQL and MySQL.
 
-Exit criteria:
+Result:
 
-- The adapter passes the conformance suite with PostgreSQL and with MySQL.
-- The acceptance tests AT-1 to AT-6 pass with the adapter.
-- The documentation gives the measured latency of each operation and the lowest practical sync interval.
+- [x] The adapter passes the conformance suite with PostgreSQL and with MySQL.
+- [x] AT-1, AT-2, and the test for data loss pass with the adapter.
+- [ ] Not done: AT-3 to AT-6 with the adapter. The core tests cover them with the in-memory adapter.
+- [x] The [SQL adapter](stores/sql.md) document gives the measured latency of `Load` and `Report`.
+- [ ] Not done: a measurement of the lowest practical sync interval.
 
 ### M9: MongoDB adapter
 
@@ -241,11 +268,16 @@ Scope:
 - Design document for the document layout, the atomic updates, and the cleanup.
 - Adapter module on the official MongoDB Go driver.
 
-Exit criteria:
+Result:
 
-- The adapter passes the conformance suite with a real MongoDB replica set.
-- The acceptance tests AT-1 to AT-6 pass with the adapter.
-- The documentation gives the minimum MongoDB version, the measured latency of each operation, and the lowest practical sync interval.
+- [x] The adapter passes the conformance suite with a real MongoDB 7 server.
+- [ ] Not done: a test with a replica set, and a test with the minimum version 4.4.
+- [x] AT-1, AT-2, and the test for data loss pass with the adapter.
+- [ ] Not done: AT-3 to AT-6 with the adapter. The core tests cover them with the in-memory adapter.
+- [x] The [MongoDB adapter](stores/mongodb.md) document gives the minimum MongoDB version and the measured latency of `Load` and `Report`.
+- [ ] Not done: a measurement of the lowest practical sync interval.
+
+Difference from the plan: the adapter uses a compare-and-set on a version field with at most 16 attempts, not one `findOneAndUpdate` that makes the full transition.
 
 ### Later adapters
 
@@ -253,73 +285,98 @@ Exit criteria:
 
 ## 4. Milestones for the other policies
 
-Each policy gets its own requirements and design document before its implementation starts.
-Each policy must satisfy the toolkit requirements TK-1 to TK-53.
-Each milestone ends with a release.
+Each policy has its own requirements document and guide.
+The plan was that each milestone ends with a release. No release exists.
 
 ### M10: Timeout and retry
 
-- Timeout for each attempt, with `timeout.ErrTimeout`.
-- Retry with backoff, jitter, and a retry budget.
-- Composition of policies in the recommended order.
-- The retry rules of [policy composition](policy-composition.md): rejections are final, state check before each attempt, probes do not retry.
+Result:
 
-Requirements: PI-1 to PI-3.
+- [x] Timeout for each attempt, with `timeout.ErrTimeout`. See the [timeout guide](timeout/README.md).
+- [x] Retry with backoff, jitter, and a retry budget. See the [retry guide](retry/README.md).
+- [x] Composition of policies in the recommended order. The test `TestPolicyPipeline` runs all seven policies in one pipeline.
+- [x] Rejections are final for the retry policy.
+- [x] The state check before each attempt is the option `retry.WithGate`. The application sets it. The library does not add it automatically. With this gate, a probe does not retry.
+
+Requirements: PI-1 to PI-3, TO-1 to TO-15, RT-1 to RT-20.
 
 ### M11: Bulkhead and concurrency limiter
 
-- Bulkhead with a fixed limit of concurrent calls and an optional wait queue with a limit.
-- Concurrency limiter that adapts the limit to the measured latency.
+Result:
+
+- [x] Bulkhead with a fixed limit of concurrent calls and an optional wait queue with a limit. See the [bulkhead guide](bulkhead/README.md).
+- [x] Concurrency limiter that adapts the limit to the results of the calls. It keeps only the limit and the number of calls in progress. See the [concurrency limiter guide](concurrencylimit/README.md).
 
 ### M12: Rate limiter and load shedding
 
-- Local rate limiter.
-- Load shedding by priority.
-- Evaluation of a distributed rate limiter on the same store.
+Result:
 
-## 5. Definition of done for the distributed circuit breaker
+- [x] Local rate limiter with a token bucket. See the [rate limiter guide](ratelimit/README.md).
+- [x] Load shedding by priority. See the [load shedding guide](loadshed/README.md).
+- [ ] Not done: the evaluation of a distributed rate limiter on the same store. The distributed rate limiter is not implemented.
 
-- [ ] Instances share the breaker state correctly.
-- [ ] A normal call needs no store round trip.
-- [ ] A store fault does not break the breaker.
-- [ ] Each adapter passes the conformance suite.
-- [ ] Local mode works correctly.
-- [ ] Recovery reconciles the state safely.
-- [ ] A stale instance cannot overwrite a newer state.
-- [ ] The probe limit applies to all instances together.
-- [ ] Concurrent transitions are safe.
-- [ ] An instance that starts continues from the authoritative state.
-- [ ] Store restart and failover are handled.
-- [ ] A dependency failure does not cause a retry storm. This item needs M10.
-- [ ] Metrics and logs give sufficient information for operation.
-- [ ] Benchmarks show that the cost is acceptable.
-- [ ] Each critical race has an automated test.
-- [ ] The coverage is 98% or more, and each requirement has a test (QA-1 to QA-14).
-- [ ] The documentation describes the consistency model and the failure model.
+## 5. Open items
 
-## 6. Confirmed decisions
+| Item | Detail |
+|---|---|
+| No release tag | No module has a version tag. Each separate module uses a `replace` directive to the core in the same repository, and requires the core with the version `v0.0.0`. A release needs a tag for each module and a real version in each `go.mod`. The release is the decision of the owner. |
+| Mutation gate | The automated mutation gate is not active. The maintainers run mutations by hand. Only the run of M1 is recorded. |
+| Observability of the other policies | The timeout, retry, bulkhead, concurrency limiter, rate limiter, and load shedding policies have no metrics, no logs, and no observer. Only the circuit breaker satisfies the toolkit requirements TK-40 to TK-42. |
+| Configuration fingerprint | Not implemented. The library does not detect different configurations between instances. |
+| Transition notifications | Not implemented. The Redis adapter does not use Pub/Sub. The sync interval gives the propagation. |
+| Benchmarks | All results come from one Apple M4 machine with the stores in local containers. No result comes from a Linux server that is typical for production. |
+| Distributed rate limiter | Not implemented and not evaluated. The rate limiter works in one process. |
+| Examples in the documents | Requirement QA-13 is satisfied by the two example programs. No test compiles each code block of the documents. |
+| Documentation comments | The exported names have no documentation comments, because the project forbids comments in code. The package pages of the Go documentation site then show only the signatures. |
+| Tests of the adapters | AT-3 to AT-6 and the system benchmark do not run with the SQL adapter and the MongoDB adapter. No test uses a Redis Cluster with many nodes, Redis Sentinel, or a MongoDB replica set. |
+| Long run | No run of one hour for memory exists. |
+| gRPC example | Not written. |
+
+## 6. Definition of done for the distributed circuit breaker
+
+- [x] Instances share the breaker state correctly. AT-1 passes with each adapter.
+- [x] A normal call needs no store round trip. The system benchmark shows it.
+- [x] A store fault does not break the breaker. AT-3 passes.
+- [x] Each adapter passes the conformance suite.
+- [x] Local mode works correctly.
+- [x] Recovery reconciles the state safely. AT-4 passes.
+- [x] A stale instance cannot overwrite a newer state. AT-5 passes.
+- [x] The probe limit applies to all instances together. AT-2 passes with each adapter.
+- [x] Concurrent transitions are safe. The conformance suite has concurrency checks.
+- [x] An instance that starts continues from the authoritative state.
+- [ ] Store restart and failover are handled. Data loss has tests with each adapter. A restart of a real store and a failover have no test.
+- [x] A dependency failure does not cause a retry storm, when the application sets the retry gate or a retry budget.
+- [x] The circuit breaker has metrics, logs, and events for its state, its mode, and its store faults.
+- [ ] Benchmarks show that the cost is acceptable. The results exist for one machine only.
+- [x] Each critical race has an automated test with the race detector.
+- [ ] The coverage is 98% or more, and each requirement has a test (QA-1 to QA-14). The coverage gate is active. The mutation part of QA-9 and the release gate QA-14 are not satisfied.
+- [x] The documentation describes the consistency model and the failure model.
+
+## 7. Confirmed decisions
 
 The owner of the project confirmed these decisions on 2026-11-24.
+The row for the transition logic and the Go versions of the separate modules come from the implementation.
 
 | Topic | Decision | Effect of a change |
 |---|---|---|
 | Module path | `github.com/faultvane/faultvane-go` | Cheap before the first release. Expensive after it. |
-| Minimum Go version | 1.24 | Sets the language features that the code can use. |
+| Minimum Go version | 1.24 for the core module. The adapter modules and the `otel` module need 1.25 or 1.26, because of their client libraries. | Sets the language features that the code can use. |
 | Shared store | One interface with adapters. In-memory and Redis first, then SQL, then MongoDB | See [ADR 0006](adr/0006-store-interface-and-adapters.md). |
+| Transition logic of the adapters | One exported type `Record` for the adapters written in Go. Lua scripts for Redis | See [ADR 0007](adr/0007-shared-record-for-go-adapters.md). |
 | Redis client | `github.com/redis/go-redis/v9` | Sets the dependency of the Redis adapter module. |
 | Default start policy | `StartWithProbe` | See [ADR 0004](adr/0004-local-breaker-fallback.md). |
 | Default policy after the local mode time limit | `KeepLocalBreaker` | See [ADR 0004](adr/0004-local-breaker-fallback.md). |
 | Window type | Time-based only | See [failure detection](circuit-breaker/failure-detection.md). |
 
-## 7. Risks
+## 8. Risks
 
 | Risk | Effect | Mitigation |
 |---|---|---|
 | The shared window is less exact than a record of each call. | The circuit opens a short time late. | Early reports. The limits are documented and tested. |
-| Different configurations between instances. | The failure condition depends on the reporter. | Fingerprint, warning, and metric. |
-| An adapter contains a second implementation of the transitions. | Adapters behave differently. | The conformance suite compares each adapter with the pure state machine. |
+| Different configurations between instances. | The failure condition depends on the reporter. | None in the code. The configuration fingerprint is not implemented. The documentation tells the application to use one configuration. |
+| An adapter contains a second implementation of the transitions. | Adapters behave differently. | The in-memory, SQL, and MongoDB adapters share the type `Record`. Only the Redis scripts are a second implementation. The conformance suite compares each adapter with the in-memory store. See [ADR 0007](adr/0007-shared-record-for-go-adapters.md). |
 | Tests with real time are not stable. | Slow or flaky continuous integration. | Fake clock in unit tests. Wait for conditions in integration tests. |
-| The coverage minimum of 98% causes tests without value. | High coverage with weak assertions. | Mutation tests, property tests, and the traceability check measure the quality of the assertions. |
+| The coverage minimum of 98% causes tests without value. | High coverage with weak assertions. | Property tests and the traceability check measure the quality of the assertions. The automated mutation gate is not active. |
 | The coverage minimum slows the delivery. | Milestones take longer. | Accepted. Test-driven development keeps the coverage high from the first commit of each milestone. |
-| The scope of seven policies is large. | The first release is late. | The circuit breaker is complete and released before the other policies start. |
-| The policy interface is fixed with only one policy. | A later policy does not fit the interface. | The tests of M1 contain a simple timeout and a simple retry that use the interface. The API can change until version 1.0. |
+| The scope of seven policies is large. | The first release is late. | This risk occurred in a different form: all seven policies are implemented, and no release exists yet. |
+| The policy interface is fixed with only one policy. | A later policy does not fit the interface. | Closed. All seven policies implement the interface. The API can change until version 1.0. |
