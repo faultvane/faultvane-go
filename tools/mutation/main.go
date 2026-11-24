@@ -212,17 +212,17 @@ func run(arguments []string, out io.Writer) int {
 	workers := flags.Int("workers", 4, "the number of test runs at the same time")
 	timeout := flags.Duration("timeout", 3*time.Minute, "the time limit of one test run")
 	if err := flags.Parse(arguments); err != nil || flags.NArg() == 0 || *workers < 1 {
-		fmt.Fprintln(out, "usage: mutation [-dir module] [-min percent] [-workers n] [-timeout duration] package...")
+		_, _ = fmt.Fprintln(out, "usage: mutation [-dir module] [-min percent] [-workers n] [-timeout duration] package...")
 		return 2
 	}
 	absolute, err := filepath.Abs(*root)
 	if err != nil {
-		fmt.Fprintln(out, err)
+		_, _ = fmt.Fprintln(out, err)
 		return 2
 	}
 	scratch, err := os.MkdirTemp("", "faultvane-mutation")
 	if err != nil {
-		fmt.Fprintln(out, err)
+		_, _ = fmt.Fprintln(out, err)
 		return 2
 	}
 	defer func() { _ = os.RemoveAll(scratch) }()
@@ -231,7 +231,7 @@ func run(arguments []string, out io.Writer) int {
 	for _, pkg := range flags.Args() {
 		result, err := examine(r, pkg, *workers)
 		if err != nil {
-			fmt.Fprintln(out, err)
+			_, _ = fmt.Fprintln(out, err)
 			return 2
 		}
 		verdict := "ok"
@@ -239,9 +239,9 @@ func run(arguments []string, out io.Writer) int {
 			verdict = "BELOW MINIMUM"
 			status = 1
 		}
-		fmt.Fprintf(out, "%-24s score %5.1f%%  killed %d  survived %d  not compiled %d  %s\n", result.pkg, result.score(), result.killed, len(result.survivors), result.invalid, verdict)
+		_, _ = fmt.Fprintf(out, "%-24s score %5.1f%%  killed %d  survived %d  not compiled %d  %s\n", result.pkg, result.score(), result.killed, len(result.survivors), result.invalid, verdict)
 		for _, survivor := range result.survivors {
-			fmt.Fprintf(out, "  survived: %s\n", survivor)
+			_, _ = fmt.Fprintf(out, "  survived: %s\n", survivor)
 		}
 	}
 	return status
