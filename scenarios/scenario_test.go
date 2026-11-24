@@ -46,6 +46,7 @@ type status struct {
 	Mode    string `json:"mode"`
 	Breaker struct {
 		Failures         int64
+		StoreErrors      int64
 		LocalModeEntries int64
 		Opened           int64
 		HalfOpened       int64
@@ -236,6 +237,18 @@ func (c *cluster) status(index int) status {
 	return s
 }
 
+func (c *cluster) awaitAll(state, mode string) {
+	c.t.Helper()
+	defer func() {
+		if c.t.Failed() {
+			for i := range c.pods {
+				c.t.Logf("pod %d: %+v", i, c.status(i))
+			}
+		}
+	}()
+	eventually(c.t, "all pods are "+state+" in "+mode+" mode", c.all(state, mode))
+}
+
 func (c *cluster) all(state, mode string) func() bool {
 	return func() bool {
 		for i := range c.pods {
@@ -272,7 +285,7 @@ func (c *cluster) openAll(configuration map[string]any) {
 	c.mode(http.StatusServiceUnavailable, 0)
 	c.setup(configuration)
 	c.load(0, map[string]any{"calls": 5})
-	eventually(c.t, "all pods are open", c.all("open", "distributed"))
+	c.awaitAll("open", "distributed")
 }
 
 func (c *cluster) loseData(store string) {
@@ -360,7 +373,7 @@ func TestScenarios(t *testing.T) {
 					t.Fatalf("pod %d: %+v, want 1 failed call", i, r)
 				}
 			}
-			eventually(t, "all pods are open", c.all("open", "distributed"))
+			c.awaitAll("open", "distributed")
 			for i := range c.pods {
 				if s := c.status(i); s.Breaker.Failures != 1 || s.Breaker.Opened != 1 {
 					t.Fatalf("pod %d: %d failures and %d open transitions, want 1 and 1", i, s.Breaker.Failures, s.Breaker.Opened)
@@ -380,7 +393,7 @@ func TestScenarios(t *testing.T) {
 			c.mode(http.StatusServiceUnavailable, 20)
 			c.setup(breaker(store, nil))
 			ok, _, _ := total(c.loadAll(map[string]any{"calls": 300, "concurrency": 10}))
-			eventually(t, "all pods are open", c.all("open", "distributed"))
+			c.awaitAll("open", "distributed")
 			for i := range c.pods {
 				if s := c.status(i); s.Breaker.Opened != 1 || s.Breaker.HalfOpened != 0 || s.Breaker.Closed != 0 {
 					t.Fatalf("pod %d: transitions open %d, half-open %d, closed %d, want 1, 0, 0", i, s.Breaker.Opened, s.Breaker.HalfOpened, s.Breaker.Closed)
@@ -401,7 +414,7 @@ func TestScenarios(t *testing.T) {
 				t.Fatalf("the dependency got %d calls; ok %d, failed %d, rejected %v; want 1 call, 1 ok, 29 probe rejections", stats.Total, ok, failed, rejected)
 			}
 			c.mode(http.StatusOK, 0)
-			eventually(t, "all pods are closed", c.all("closed", "distributed"))
+			c.awaitAll("closed", "distributed")
 		})
 
 		t.Run("RF-5 the pods restore the state after a loss of data in "+store, func(t *testing.T) {
@@ -458,7 +471,7 @@ func TestScenarios(t *testing.T) {
 					compose(t, "start", store)
 				}
 			}()
-			eventually(t, "all pods are in local mode", c.all("closed", "local"))
+			c.awaitAll("closed", "local")
 			ok, failed, rejected := total(c.loadAll(map[string]any{"calls": 50, "concurrency": 5}))
 			if ok != 500 || failed != 0 || len(rejected) != 0 {
 				t.Fatalf("without the store: ok %d, failed %d, rejected %v, want 500 ok", ok, failed, rejected)
@@ -670,7 +683,7 @@ func TestScenarios(t *testing.T) {
 			"timeoutMs":        500,
 		})
 		ok, _, rejected := total(c.loadAll(map[string]any{"calls": 500, "concurrency": 10, "pauseMs": 1}))
-		eventually(t, "all pods are open", c.all("open", "distributed"))
+		c.awaitAll("open", "distributed")
 		if stats := c.dependencyStats(); ok != 0 || stats.Total >= 2500 || rejected["open"] == 0 {
 			t.Fatalf("outage: ok %d, the dependency got %d attempts for 5000 requests, rejected %v", ok, stats.Total, rejected)
 		}
