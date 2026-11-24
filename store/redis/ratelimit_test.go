@@ -47,9 +47,27 @@ func rateLimitLimiter(t *testing.T, store ratelimit.Store, opts ...ratelimit.Opt
 	return limiter
 }
 
+func clusterClient(t *testing.T) *redis.ClusterClient {
+	t.Helper()
+	reachable(t, cluster())
+	client := redis.NewClusterClient(&redis.ClusterOptions{
+		ClusterSlots: func(context.Context) ([]redis.ClusterSlot, error) {
+			return []redis.ClusterSlot{{Start: 0, End: 16383, Nodes: []redis.ClusterNode{{Addr: cluster()}}}}, nil
+		},
+		DialTimeout: time.Second,
+	})
+	t.Cleanup(func() { _ = client.Close() })
+	return client
+}
+
 func TestRateLimitConformance(t *testing.T) {
 	t.Run("RL-21 RL-37 QA-8 standalone Redis", func(t *testing.T) {
 		client := reachable(t, standalone())
+		storetest.Run(t, func(t *testing.T) ratelimit.Store { return rateLimitStore(t, client) })
+	})
+
+	t.Run("RL-21 RL-37 QA-8 Redis with cluster mode and a cluster client", func(t *testing.T) {
+		client := clusterClient(t)
 		storetest.Run(t, func(t *testing.T) ratelimit.Store { return rateLimitStore(t, client) })
 	})
 }
@@ -85,23 +103,39 @@ func TestRateLimitStore(t *testing.T) {
 		}
 	})
 
-	t.Run("RL-37 the bucket is one hash with the tokens, the store time, and a time to live", func(t *testing.T) {
-		store := rateLimitStore(t, client)
-		grant := rateLimitAcquire(t, store, ratelimit.Acquire{Wanted: 3, Rate: 1e-9, Burst: 10, StateTTL: time.Hour})
-		key := store.key(rateLimitName)
-		want := map[string]string{"v": "1", "tk": "7", "ts": fmt.Sprint(grant.StoreTime.UnixMicro())}
-		if got := client.HGetAll(ctx, key).Val(); fmt.Sprint(got) != fmt.Sprint(want) || grant.Tokens != 3 {
-			t.Fatalf("hash = %v after a grant of %d, want %v after 3", got, grant.Tokens, want)
+	clustered := clusterClient(t)
+	for server, client := range map[string]redis.UniversalClient{"standalone Redis": client, "Redis with cluster mode": clustered} {
+		t.Run("RL-37 the bucket is one hash with the tokens, the store time, and a time to live in "+server, func(t *testing.T) {
+			store := rateLimitStore(t, client)
+			grant := rateLimitAcquire(t, store, ratelimit.Acquire{Wanted: 3, Rate: 1e-9, Burst: 10, StateTTL: time.Hour})
+			key := store.key(rateLimitName)
+			want := map[string]string{"v": "1", "tk": "7", "ts": fmt.Sprint(grant.StoreTime.UnixMicro())}
+			if got := client.HGetAll(ctx, key).Val(); fmt.Sprint(got) != fmt.Sprint(want) || grant.Tokens != 3 {
+				t.Fatalf("hash = %v after a grant of %d, want %v after 3", got, grant.Tokens, want)
+			}
+			if keys := client.Keys(ctx, "*"+store.store.namespace+"*").Val(); len(keys) != 1 || keys[0] != key {
+				t.Fatalf("keys = %v, want only %s", keys, key)
+			}
+			if ttl := client.PTTL(ctx, key).Val(); ttl <= 59*time.Minute || ttl > time.Hour {
+				t.Fatalf("time to live = %v, want about 1h", ttl)
+			}
+			rateLimitAcquire(t, store, ratelimit.Acquire{Rate: 1e-9, Burst: 10, StateTTL: 3 * time.Hour})
+			if ttl := client.PTTL(ctx, key).Val(); ttl <= 2*time.Hour {
+				t.Fatalf("time to live after the second operation = %v, want about 3h", ttl)
+			}
+		})
+	}
+
+	t.Run("RL-37 the key of a name is in the hash slot of the circuit breaker keys of Redis with cluster mode", func(t *testing.T) {
+		store := rateLimitStore(t, clustered)
+		slot, err := clustered.ClusterKeySlot(ctx, store.key(rateLimitName)).Result()
+		if err != nil {
+			t.Fatal(err)
 		}
-		if keys := client.Keys(ctx, "*"+store.store.namespace+"*").Val(); len(keys) != 1 || keys[0] != key {
-			t.Fatalf("keys = %v, want only %s", keys, key)
-		}
-		if ttl := client.PTTL(ctx, key).Val(); ttl <= 59*time.Minute || ttl > time.Hour {
-			t.Fatalf("time to live = %v, want about 1h", ttl)
-		}
-		rateLimitAcquire(t, store, ratelimit.Acquire{Rate: 1e-9, Burst: 10, StateTTL: 3 * time.Hour})
-		if ttl := client.PTTL(ctx, key).Val(); ttl <= 2*time.Hour {
-			t.Fatalf("time to live after the second operation = %v, want about 3h", ttl)
+		for _, key := range store.store.keys(rateLimitName) {
+			if got, err := clustered.ClusterKeySlot(ctx, key).Result(); err != nil || got != slot {
+				t.Fatalf("slot of %s = %d, %v, want %d", key, got, err, slot)
+			}
 		}
 	})
 

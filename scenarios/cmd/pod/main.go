@@ -49,8 +49,9 @@ type setup struct {
 		Waiting int `json:"waiting"`
 	} `json:"bulkhead"`
 	RateLimit *struct {
-		Rate  float64 `json:"rate"`
-		Burst int     `json:"burst"`
+		Rate      float64 `json:"rate"`
+		Burst     int     `json:"burst"`
+		LocalRate float64 `json:"localRate"`
 	} `json:"rateLimit"`
 	ConcurrencyLimit *struct {
 		Initial   int `json:"initial"`
@@ -75,6 +76,7 @@ type load struct {
 	Priority    string `json:"priority"`
 	Local       bool   `json:"local"`
 	PauseMs     int    `json:"pauseMs"`
+	DurationMs  int    `json:"durationMs"`
 }
 
 type result struct {
@@ -95,6 +97,8 @@ type status struct {
 	Breaker         circuitbreaker.Stats `json:"breaker"`
 	StoreOperations int64                `json:"storeOperations"`
 	Limit           int                  `json:"limit"`
+	RateLimitMode   string               `json:"rateLimitMode"`
+	RateLimit       ratelimit.Stats      `json:"rateLimit"`
 }
 
 type countingStore struct {
@@ -123,14 +127,15 @@ func (s countingStore) CompleteProbe(ctx context.Context, name string, result ci
 }
 
 type pod struct {
-	name       string
-	client     *http.Client
-	mu         sync.Mutex
-	pipeline   faultvane.Policy
-	breaker    *circuitbreaker.Breaker
-	limiter    *concurrencylimit.Limiter
-	operations atomic.Int64
-	closers    []func()
+	name        string
+	client      *http.Client
+	mu          sync.Mutex
+	pipeline    faultvane.Policy
+	breaker     *circuitbreaker.Breaker
+	limiter     *concurrencylimit.Limiter
+	rateLimiter *ratelimit.Limiter
+	operations  atomic.Int64
+	closers     []func()
 }
 
 func duration(ms, fallback int) time.Duration {
@@ -140,12 +145,16 @@ func duration(ms, fallback int) time.Duration {
 	return time.Duration(ms) * time.Millisecond
 }
 
+func (p *pod) redis() *redis.Client {
+	client := redis.NewClient(&redis.Options{Addr: "redis:6379", DialTimeout: 200 * time.Millisecond, ReadTimeout: 200 * time.Millisecond, WriteTimeout: 200 * time.Millisecond, MaxRetries: -1})
+	p.closers = append(p.closers, func() { _ = client.Close() })
+	return client
+}
+
 func (p *pod) store(ctx context.Context, s setup) (circuitbreaker.Store, error) {
 	switch s.Store {
 	case "redis":
-		client := redis.NewClient(&redis.Options{Addr: "redis:6379", DialTimeout: 200 * time.Millisecond, ReadTimeout: 200 * time.Millisecond, WriteTimeout: 200 * time.Millisecond, MaxRetries: -1})
-		p.closers = append(p.closers, func() { _ = client.Close() })
-		return redisstore.New(client, redisstore.WithNamespace(s.Namespace))
+		return redisstore.New(p.redis(), redisstore.WithNamespace(s.Namespace))
 	case "postgres", "mysql":
 		driver, dsn, dialect := "pgx", "postgres://postgres:faultvane@postgres:5432/faultvane?sslmode=disable", sqlstore.PostgreSQL
 		if s.Store == "mysql" {
@@ -183,10 +192,10 @@ func (p *pod) configure(ctx context.Context, s setup) error {
 	if p.breaker != nil {
 		_ = p.breaker.Close(ctx)
 	}
-	for _, closer := range p.closers {
+	for _, closer := range slices.Backward(p.closers) {
 		closer()
 	}
-	p.closers, p.breaker, p.limiter, p.pipeline = nil, nil, nil, nil
+	p.closers, p.breaker, p.limiter, p.rateLimiter, p.pipeline = nil, nil, nil, nil, nil
 	p.operations.Store(0)
 	var policies []faultvane.Policy
 	if s.LoadShed != nil {
@@ -196,11 +205,21 @@ func (p *pod) configure(ctx context.Context, s setup) error {
 		}
 		policies = append(policies, shedder)
 	}
-	if s.RateLimit != nil {
-		limiter, err := ratelimit.New(ratelimit.WithRate(s.RateLimit.Rate), ratelimit.WithBurst(s.RateLimit.Burst))
+	if r := s.RateLimit; r != nil {
+		opts := []ratelimit.Option{ratelimit.WithRate(r.Rate), ratelimit.WithBurst(r.Burst)}
+		if r.LocalRate > 0 {
+			store, err := redisstore.NewRateLimitStore(p.redis(), redisstore.WithNamespace(s.Namespace))
+			if err != nil {
+				return err
+			}
+			opts = append(opts, ratelimit.WithStore(store), ratelimit.WithName("dependency"), ratelimit.WithLocalRate(r.LocalRate))
+		}
+		limiter, err := ratelimit.New(opts...)
 		if err != nil {
 			return err
 		}
+		p.closers = append(p.closers, func() { _ = limiter.Close(context.Background()) })
+		p.rateLimiter = limiter
 		policies = append(policies, limiter)
 	}
 	if c := s.ConcurrencyLimit; c != nil {
@@ -333,12 +352,16 @@ func (p *pod) run(l load) result {
 	var next atomic.Int64
 	var group sync.WaitGroup
 	started := time.Now()
+	more := func() bool { return next.Add(1) <= int64(l.Calls) }
+	if l.DurationMs > 0 {
+		more = func() bool { return time.Since(started) < time.Duration(l.DurationMs)*time.Millisecond }
+	}
 	for w := range workers {
 		outcomes[w] = map[string]int{}
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			for next.Add(1) <= int64(l.Calls) {
+			for more() {
 				begin := time.Now()
 				err := pipeline.Do(ctx, call)
 				samples[w] = append(samples[w], time.Since(begin))
@@ -385,6 +408,10 @@ func (p *pod) status() status {
 	}
 	if p.limiter != nil {
 		s.Limit = p.limiter.Limit()
+	}
+	if p.rateLimiter != nil {
+		s.RateLimit = p.rateLimiter.Stats()
+		s.RateLimitMode = s.RateLimit.Mode.String()
 	}
 	return s
 }

@@ -15,7 +15,14 @@ import (
 	"time"
 )
 
-const pods = 10
+const (
+	pods        = 10
+	sharedRate  = 500
+	sharedBurst = 50
+	localRate   = 20
+	localBurst  = 2
+	usedPart    = 0.7
+)
 
 var (
 	namespaceCounter atomic.Uint64
@@ -44,8 +51,13 @@ type status struct {
 		HalfOpened       int64
 		Closed           int64
 	} `json:"breaker"`
-	StoreOperations int64 `json:"storeOperations"`
-	Limit           int   `json:"limit"`
+	StoreOperations int64  `json:"storeOperations"`
+	Limit           int    `json:"limit"`
+	RateLimitMode   string `json:"rateLimitMode"`
+	RateLimit       struct {
+		StoreErrors int64
+		Allowance   int
+	} `json:"rateLimit"`
 }
 
 type dependencyStats struct {
@@ -277,6 +289,59 @@ func (c *cluster) loseData(store string) {
 	}
 }
 
+func sharedRateLimit() map[string]any {
+	return map[string]any{"namespace": namespace(), "rateLimit": map[string]any{"rate": sharedRate, "burst": sharedBurst, "localRate": localRate}}
+}
+
+func heavyLoad() map[string]any {
+	return map[string]any{"durationMs": 3000, "concurrency": workers(), "pauseMs": 1}
+}
+
+func (c *cluster) storeTime() time.Time {
+	c.t.Helper()
+	var seconds, microseconds int64
+	if _, err := fmt.Sscan(compose(c.t, "exec", "-T", "redis", "redis-cli", "time"), &seconds, &microseconds); err != nil {
+		c.t.Fatal(err)
+	}
+	return time.Unix(seconds, microseconds*1000)
+}
+
+func (c *cluster) rateLimitMode(mode string) func() bool {
+	return func() bool {
+		for i := range c.pods {
+			if c.status(i).RateLimitMode != mode {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+func (c *cluster) heldTokens() (held int, idle bool) {
+	idle = true
+	for i := range c.pods {
+		s := c.status(i)
+		held += s.RateLimit.Allowance
+		idle = idle && s.RateLimit.Allowance <= 1
+	}
+	return held, idle && c.rateLimitMode("distributed")()
+}
+
+func (c *cluster) expectSharedRate(started time.Time, held int) {
+	c.t.Helper()
+	ok, failed, rejected := total(c.loadAll(heavyLoad()))
+	seconds := c.storeTime().Sub(started).Seconds()
+	got := c.dependencyStats().Total
+	most, least := sharedBurst+int(sharedRate*seconds)+held, int(usedPart*sharedRate*seconds)
+	c.t.Logf("the dependency got %d calls in %.3f s of store time, limits %d and %d, %d held tokens, %d rejections", got, seconds, least, most, held, rejected["rate"])
+	if got != ok || failed != 0 || rejected["rate"] == 0 || len(rejected) != 1 || got > most || got < least {
+		c.t.Fatalf("the dependency got %d calls in %.3f s of store time, want from %d to %d; ok %d, failed %d, rejected %v", got, seconds, least, most, ok, failed, rejected)
+	}
+	if !c.rateLimitMode("distributed")() {
+		c.t.Fatal("a pod is not in distributed mode after the load")
+	}
+}
+
 func TestScenarios(t *testing.T) {
 	if os.Getenv("FAULTVANE_SCENARIOS") == "" {
 		t.Skip("set FAULTVANE_SCENARIOS=1 to run the scenarios with 10 pods in Docker")
@@ -481,6 +546,50 @@ func TestScenarios(t *testing.T) {
 				t.Fatalf("pod %d: %d ok in %.0f ms, want from 20 to %d; rejected %v", i, r.OK, r.DurationMs, limit, r.Rejected)
 			}
 		}
+	})
+
+	t.Run("RL-39 RL-26 ten pods under heavy load share one rate through Redis", func(t *testing.T) {
+		c.t = t
+		c.mode(http.StatusOK, 0)
+		started := c.storeTime()
+		c.setup(sharedRateLimit())
+		c.expectSharedRate(started, 0)
+	})
+
+	t.Run("RL-40 RL-27 RL-28 RL-29 the pods use their local rate without Redis and share the rate again when it is back", func(t *testing.T) {
+		c.t = t
+		c.mode(http.StatusOK, 0)
+		c.setup(sharedRateLimit())
+		eventually(t, "all pods are in distributed mode", c.rateLimitMode("distributed"))
+		compose(t, "stop", "redis")
+		restarted := false
+		defer func() {
+			if !restarted {
+				compose(t, "start", "redis")
+			}
+		}()
+		eventually(t, "all pods are in local mode", c.rateLimitMode("local"))
+		results := c.loadAll(heavyLoad())
+		byPod := c.dependencyStats().ByPod
+		for i, r := range results {
+			s := c.status(i)
+			seconds := r.DurationMs / 1000
+			most, least := localBurst+int(localRate*seconds), int(usedPart*localRate*seconds)
+			t.Logf("pod %d without Redis: %d calls in %.3f s, limits %d and %d", i, r.OK, seconds, least, most)
+			if byPod[s.Pod] != r.OK || r.Failed != 0 || r.Timeouts != 0 || r.Rejected["rate"] == 0 || len(r.Rejected) != 1 || r.OK > most || r.OK < least {
+				t.Fatalf("pod %d without Redis: the dependency got %d calls in %.3f s, want from %d to %d; %+v", i, byPod[s.Pod], seconds, least, most, r)
+			}
+			if s.RateLimitMode != "local" || s.RateLimit.StoreErrors < 3 {
+				t.Fatalf("pod %d without Redis: %s mode after %d store errors, want local mode after 3 or more", i, s.RateLimitMode, s.RateLimit.StoreErrors)
+			}
+		}
+		compose(t, "start", "redis")
+		restarted = true
+		eventually(t, "all pods are in distributed mode and hold at most 1 token", func() bool { _, idle := c.heldTokens(); return idle })
+		c.mode(http.StatusOK, 0)
+		started := c.storeTime()
+		held, _ := c.heldTokens()
+		c.expectSharedRate(started, held)
 	})
 
 	t.Run("TO-1 a timeout in each pod ends the calls to a slow dependency", func(t *testing.T) {
