@@ -153,6 +153,7 @@ The other policies have no metrics, no logs, and no observer yet.
 | [MongoDB adapter](docs/stores/mongodb.md) | The document, the compare-and-set, and the TTL index |
 | [Decision records](docs/adr/README.md) | The important design decisions and their alternatives |
 | [Benchmarks](docs/benchmarks.md) | Measured results |
+| [Scenarios in Docker](docs/scenarios.md) | Tests with 10 pods and four real stores |
 
 ## Requirements
 

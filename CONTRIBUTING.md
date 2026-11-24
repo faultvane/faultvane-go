@@ -74,6 +74,15 @@ The test of `examples/shared` needs the Redis of `docker-compose.test.yml`. Star
 
 This command runs acceptance test AT-7 against the Redis of `docker-compose.test.yml`. [Benchmarks](docs/benchmarks.md) records the results.
 
+## Scenario tests
+
+```sh
+sh scripts/scenarios.sh
+```
+
+This command needs Docker. It starts 10 pods, a dependency, and four stores, and runs each scenario of `docs/scenarios.md`.
+Run it when you change the behavior of a policy or of a store adapter.
+
 ## Rules for code
 
 - Write idiomatic Go. Run `gofmt` and `go vet`.
