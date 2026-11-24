@@ -6,6 +6,10 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Circuit breaker: the counts of a failed reconciliation report are sent again with the next reconciliation (RC-7). The state after a store outage no longer depends on the delivery of one report.
+
 ## [0.1.0] - 2026-11-24
 
 This is the first release. Each module has the same version.

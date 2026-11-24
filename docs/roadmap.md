@@ -54,7 +54,7 @@ These criteria apply to each milestone from M1.
 |---|---|
 | All quality gates of [testing.md](testing.md) section 1 pass. | The active gates pass in continuous integration. The benchmark comparison is not active. |
 | The statement coverage is 98% or more for each module and 95% or more for each package (QA-1, QA-2). | Continuous integration enforces it for the core module, the three adapter modules, and the `otel` module. |
-| Each requirement that the milestone names has a test with its identifier (QA-5). | 289 of the 305 requirements are in `scripts/implemented-requirements.txt`, and each has a test. The other 16 are requirements about the process, the documentation, or performance targets: QA-1 to QA-7, QA-10 to QA-12, QA-14, SEC-2, TK-4, and TK-51 to TK-53. No test names them. |
+| Each requirement that the milestone names has a test with its identifier (QA-5). | 290 of the 306 requirements are in `scripts/implemented-requirements.txt`, and each has a test. The other 16 are requirements about the process, the documentation, or performance targets: QA-1 to QA-7, QA-10 to QA-12, QA-14, SEC-2, TK-4, and TK-51 to TK-53. No test names them. |
 | Each scenario that the design documents of the milestone describe has a test. | Not verified for each scenario. The tests of each milestone exist. |
 | The mutation score of the critical packages that the milestone changes is 90% or more (QA-9). | The mutation gate measures it each day for the seven policy packages. [Testing](testing.md) section 2 records the result. |
 
@@ -162,7 +162,7 @@ Scope:
 - Reconciliation.
 - Data loss detection and `Restore`.
 
-Requirements: DG-1 to DG-7, RC-1 to RC-6, RF-1, RF-3 to RF-5, ERR-3.
+Requirements: DG-1 to DG-7, RC-1 to RC-7, RF-1, RF-3 to RF-5, ERR-3.
 
 Result:
 
@@ -319,7 +319,6 @@ Result:
 | Item | Detail |
 |---|---|
 | Release steps | A release is a manual sequence: a version in each `go.mod`, the changelog, all workflows on the release commit, then one tag for each module. No workflow automates it. Each separate module keeps a `replace` directive to the core in the same repository; a user of the module does not get this directive. |
-| Mutants that survive | 3 mutants survive in `circuitbreaker/sync.go`. No test proves the delay calculation of the synchronizer loop. The mutation gate does not apply to `circuitbreaker/storetest` (score 63.2%), to the store adapters, or to the `otel` module. |
 | Logs of the concurrency limiter | The concurrency limiter writes a log record only when the limit reaches the minimum and when it returns to the initial limit. If the dependency then serves fewer calls than the initial limit, a second decrease to the minimum gives no log record. The observer and the metrics show each change. |
 | Cost of the limit events | A call of the concurrency limiter that adapts the limit is about 1 ns slower, because the limiter compares the limit after each adaptation. |
 | Cost of the retry statistics | Each call of the retry policy writes one shared counter. With 10 parallel goroutines and an empty call, one call takes about 51 ns. Before the statistics it took 0.6 ns. A counter for each processor removes this cost but adds code. Examine it again if a profile of a real service shows the retry policy. |
@@ -330,7 +329,7 @@ Result:
 | Examples in the documents | Requirement QA-13 is satisfied by the three example programs. No test compiles each code block of the documents. |
 | Documentation comments | The exported names have no documentation comments, because the project forbids comments in code. The package pages of the Go documentation site then show only the signatures. |
 | Tests of the adapters | The system benchmark does not run with the SQL adapter and the MongoDB adapter. The Redis adapter has no separate AT-5 test. No test restarts a real store. No test uses a Redis Cluster with many nodes, Redis Sentinel, or a MongoDB replica set. |
-| Counts of a failed report | The breaker does not send a failed report again (FD-7). When the report after an outage fails, the local failure counts are lost and the instance adopts the state of the store. The fleet converges, but the state after the outage depends on the delivery of that report. The Redis test of AT-6 asserts `OPEN` after the outage and can fail for this reason. No failure of it is recorded. |
+| Counts of a failed report | A failed report in distributed mode is not sent again, so the failures of the first moments of a store outage do not reach the shared window. A failed report of a reconciliation is sent again (RC-7). If the store applied that report but its response was lost, the counts of one local window count two times. An idempotency key in the report removes both limits, but it changes the store contract. |
 
 ## 6. Definition of done for the distributed circuit breaker
 
