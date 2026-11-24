@@ -185,27 +185,22 @@ func TestRateLimitData(t *testing.T) {
 		}
 	})
 
-	forEachDatabase(t, "RL-49 the bucket refills by the time of the database, not by the time of the instance", func(t *testing.T, d database, db *sql.DB) {
+	forEachDatabase(t, "RL-49 the bucket refills by the time that the database returns, and this time does not go back", func(t *testing.T, d database, db *sql.DB) {
 		store := rateLimitStore(t, d, db)
-		drained := rateLimitAcquire(t, store, rateLimitName, ratelimit.Acquire{Wanted: 10, Rate: 1000, Burst: 10, StateTTL: time.Hour})
-		later := drained.StoreTime.Add(time.Hour)
-		query := store.store.placeholders("UPDATE " + store.store.table + " SET refilled_at = ? WHERE namespace = ? AND name = ?")
-		if _, err := db.Exec(query, later.UnixMicro(), store.store.namespace, rateLimitName); err != nil {
-			t.Fatal(err)
+		request := ratelimit.Acquire{Wanted: 10, Rate: 0.001, Burst: 10, StateTTL: time.Hour}
+		drained := rateLimitAcquire(t, store, rateLimitName, request)
+		ahead := *store
+		ahead.queries.lock = strings.Replace(store.queries.lock, store.store.now(), "("+store.store.now()+" + 3600000000)", 1)
+		refilled := rateLimitAcquire(t, &ahead, rateLimitName, request)
+		if elapsed := refilled.StoreTime.Sub(drained.StoreTime); refilled.Tokens != 3 || elapsed < time.Hour || elapsed > time.Hour+time.Minute {
+			t.Fatalf("grant = %+v, want 3 tokens 1h after %v", refilled, drained.StoreTime)
 		}
-		grant := rateLimitAcquire(t, store, rateLimitName, ratelimit.Acquire{Wanted: 10, Rate: 1000, Burst: 10, StateTTL: time.Hour})
-		if grant.Tokens != 0 || !grant.StoreTime.Equal(later) {
-			t.Fatalf("grant = %+v, want no tokens at %v", grant, later)
+		back := rateLimitAcquire(t, store, rateLimitName, request)
+		if back.Tokens != 0 || !back.StoreTime.Equal(refilled.StoreTime) {
+			t.Fatalf("grant after the time went back = %+v, want no tokens at %v", back, refilled.StoreTime)
 		}
-		if got := rateLimitRows(t, db, store, rateLimitName)[0]; got.tokens != 0 || got.refilledAt != later.UnixMicro() {
-			t.Fatalf("row = %+v, want no tokens at %d", got, later.UnixMicro())
-		}
-		if _, err := db.Exec(query, drained.StoreTime.Add(-time.Hour).UnixMicro(), store.store.namespace, rateLimitName); err != nil {
-			t.Fatal(err)
-		}
-		refilled := rateLimitAcquire(t, store, rateLimitName, ratelimit.Acquire{Wanted: 4, Rate: 0.001, Burst: 10, StateTTL: time.Hour})
-		if skew := refilled.StoreTime.Sub(drained.StoreTime); refilled.Tokens != 3 || skew < 0 || skew > time.Minute {
-			t.Fatalf("grant = %+v, want 3 tokens for 1h of database time near %v", refilled, drained.StoreTime)
+		if got := rateLimitRows(t, db, store, rateLimitName)[0]; got.tokens > 0.7 || got.refilledAt != refilled.StoreTime.UnixMicro() {
+			t.Fatalf("row = %+v, want less than 1 token at %d", got, refilled.StoreTime.UnixMicro())
 		}
 	})
 
