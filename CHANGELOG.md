@@ -14,6 +14,7 @@ No release exists yet. This section lists what the repository contains.
 - Statistics for the rate limiter: `Stats` and `RegisterRateLimitMetrics` in the `otel` module.
 - Statistics for the timeout, retry, bulkhead, concurrency limiter, and load shedding policies: a `Stats` method in each package, and the functions `RegisterTimeoutMetrics`, `RegisterRetryMetrics`, `RegisterBulkheadMetrics`, `RegisterConcurrencyLimitMetrics`, and `RegisterLoadShedMetrics` in the `otel` module.
 - Acceptance tests AT-3 to AT-6 for the SQL adapter and the MongoDB adapter against real stores.
+- Tests of the shared rate limit with a Redis cluster client, and two Docker scenarios with 10 pods for it.
 - Configuration fingerprint of the circuit breaker: an instance detects that the last writer of the shared state has a different configuration. New: `Breaker.ConfigFingerprint`, `Stats.ConfigMismatch`, the event kind `ConfigMismatchChanged`, the metric `faultvane.circuit_breaker.config_mismatch`, the field `Fingerprint` in the store types, and `Record.Apply`.
 - Events and logs for the rate limiter with a store (mode changes and store faults) and for the concurrency limiter (limit changes): `WithObserver`, `WithLogger`, `Observer`, `Event`, and `EventKind` in each of the two packages.
 - A long run test for memory and goroutines, with a weekly workflow.
