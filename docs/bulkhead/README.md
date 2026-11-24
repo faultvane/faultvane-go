@@ -3,7 +3,7 @@
 The bulkhead limits the number of calls that run at the same time for one dependency.
 One slow dependency then cannot use all goroutines, memory, and connections of the service.
 
-Status: implemented in the package `bulkhead`. The bulkhead has no metrics, no logs, and no observer yet.
+Status: implemented in the package `bulkhead`.
 
 | Document | Content |
 |---|---|
@@ -26,6 +26,7 @@ func New(opts ...Option) (*Bulkhead, error)
 func (b *Bulkhead) Do(ctx context.Context, call func(context.Context) error) error
 func (b *Bulkhead) InFlight() int
 func (b *Bulkhead) Waiting() int
+func (b *Bulkhead) Stats() Stats
 
 var ErrFull error
 ```
@@ -36,6 +37,7 @@ var ErrFull error
 | `Do` | Gets a slot, runs the call, and frees the slot. It returns the error of the call without a change. |
 | `InFlight` | Returns the number of calls in progress. |
 | `Waiting` | Returns the number of waiting callers. |
+| `Stats` | Returns the counts and the current load of the bulkhead. |
 | `ErrFull` | The rejection error. It matches `faultvane.ErrRejected`. |
 
 `*Bulkhead` implements `faultvane.Policy`.
@@ -72,13 +74,42 @@ receipt, err := faultvane.Execute(ctx, payments, func(ctx context.Context) (Rece
 })
 ```
 
-### Status for metrics
+### Statistics and metrics
 
 ```go
-fmt.Println(payments.InFlight(), payments.Waiting())
+stats := payments.Stats()
 ```
 
-Read these values at an interval and export them as gauges.
+`Stats` returns a value of the type `Stats`. All counts start at 0 for a new instance and only increase.
+
+| Field of `Stats` | Content |
+|---|---|
+| `Permitted` | The number of calls that got a slot. |
+| `Rejected` | The number of calls that returned `ErrFull`. |
+| `Waited` | The number of calls that got a waiting place. |
+| `InFlight` | The number of calls in progress at this moment. |
+| `Waiting` | The number of waiting callers at this moment. |
+
+A call whose context has ended before the decision changes no count. A waiting caller whose context ends is in `Waited`, but not in `Permitted` and not in `Rejected`.
+The bulkhead changes each count under the mutex that it has already. To count makes no memory allocation and adds no lock operation.
+
+The module `github.com/faultvane/faultvane-go/otel` exports these values as OpenTelemetry metrics:
+
+```go
+registration, err := faultvaneotel.RegisterBulkheadMetrics(meter, "payments", payments)
+```
+
+| Metric | Type | Attributes | Content |
+|---|---|---|---|
+| `faultvane.bulkhead.calls` | Counter | `result`: `permitted` or `rejected` | `Permitted` and `Rejected` |
+| `faultvane.bulkhead.waited_calls` | Counter | None | `Waited` |
+| `faultvane.bulkhead.in_flight` | Gauge | None | `InFlight` |
+| `faultvane.bulkhead.waiting` | Gauge | None | `Waiting` |
+
+Each metric also has the attribute `faultvane.policy.name`. Its value is the name that you give to the function. Use a small, fixed set of names.
+The metrics read `Stats` when the reader collects them. They add no work to a call.
+`registration.Unregister()` removes the metrics.
+The policy writes no logs, because it has no state transitions and no faults. It has no observer.
 
 ## 3. Options
 
@@ -182,5 +213,5 @@ A real call to a dependency takes much longer than the bulkhead.
 - The limit is fixed. The bulkhead does not adapt it to the health of the dependency.
 - `MaxWait` uses the real time of the system. The bulkhead has no clock option.
 - A waiting caller blocks its goroutine. Keep `MaxWaiting` small.
-- The bulkhead does not report events to an observer yet. Use `InFlight` and `Waiting` for metrics.
+- The bulkhead writes no logs and has no observer. Use `Stats` and the metrics.
 - The bulkhead has no priority classes. All callers are equal.
