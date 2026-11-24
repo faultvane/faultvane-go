@@ -6,6 +6,11 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Stores for the shared rate limit with PostgreSQL, MySQL, and MongoDB: `sqlstore.NewRateLimitStore` and `mongostore.NewRateLimitStore`. The type `ratelimit.Bucket` has the bucket calculation for stores written in Go.
+- Tests of the Redis adapter with a Redis Cluster of 3 nodes: breakers and rate limits on each node, a notification between two nodes, and a slot move.
+
 ### Fixed
 
 - Circuit breaker: the counts of a failed reconciliation report are sent again with the next reconciliation (RC-7). The state after a store outage no longer depends on the delivery of one report.
