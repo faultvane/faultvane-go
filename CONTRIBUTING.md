@@ -84,6 +84,14 @@ sh scripts/scenarios.sh
 This command needs Docker. It starts 10 pods, a dependency, and four stores, and runs each scenario of `docs/scenarios.md`.
 Run it when you change the behavior of a policy or of a store adapter.
 
+## Long run
+
+```sh
+FAULTVANE_LONG_RUN=1h go test -count=1 -timeout 70m -run TestLongRun -v .
+```
+
+This command runs all seven policies under load for one hour. It fails when the heap or the number of goroutines grows.
+
 ## Mutation tests
 
 ```sh

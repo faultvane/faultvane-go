@@ -1,0 +1,24 @@
+name: Long run
+
+on:
+  schedule:
+    - cron: "11 5 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  long-run:
+    name: One hour of load
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: Run all policies for one hour and check the memory
+        env:
+          FAULTVANE_LONG_RUN: 1h
+        run: go test -count=1 -timeout 70m -run TestLongRun -v .

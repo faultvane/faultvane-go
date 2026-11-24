@@ -225,11 +225,38 @@ What the results show:
 - A runner is a shared virtual machine. The values change between runs. They do not replace a measurement on the servers of an application.
 - The store operations and the system benchmark have no result from Linux in this document.
 
+## Long run: memory and goroutines
+
+| Item | Value |
+|---|---|
+| Date | 2026-11-24 |
+| Machine | Apple M4, 10 cores, macOS |
+| Command | `FAULTVANE_LONG_RUN=1h go test -count=1 -timeout 70m -run TestLongRun -v .` |
+| Load | 4 goroutines call one pipeline of all seven policies without a pause. The circuit breaker and the rate limiter use an in-memory store. The dependency fails for 2 seconds in each 10 seconds. |
+
+The test reads the heap after a garbage collection 20 times, one time each 3 minutes.
+
+| Measurement | Result |
+|---|---|
+| Calls | 2 949 million successes, 22 million failures |
+| Transitions | The circuit opened 24 times |
+| Heap in use | 324 kB to 350 kB in each sample |
+| Goroutines | 8 in each sample during the load |
+
+What the results show:
+
+- The heap does not grow in one hour. Requirement PF-5 is satisfied for this load.
+- The number of goroutines does not grow. Requirement PF-6 is satisfied for this load.
+- The test fails when a sample after the first quarter of the run is more than 1 MiB above the largest sample of the first quarter, or when it has more goroutines.
+- The run does not use a real store, and it does not measure the memory of the process as the operating system counts it.
+
+The workflow `long-run.yml` runs the same test each week on a GitHub runner.
+
 ## What is not measured
 
 - A machine that is typical for production, for example a Linux server.
 - Stores on a different host, with a real network.
 - The system benchmark with the SQL adapter and with the MongoDB adapter.
 - `Load` of the Redis adapter, and the operations `AcquireProbe`, `CompleteProbe`, and `Restore` of each adapter.
-- The memory of an instance, and a run of one hour.
+- The memory of an instance with a real store.
 - The lowest practical sync interval for each adapter.
