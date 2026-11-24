@@ -4,7 +4,7 @@ Thank you for your interest in Faultvane.
 
 ## Before you start
 
-- Read the [requirements](docs/requirements.md) and the [architecture](docs/architecture.md).
+- Read the [requirements](docs/requirements.md) and the [architecture](docs/architecture.md). For a change of one policy, read the documents of that policy also.
 - For a change of behavior, open an issue first. Describe the problem, not only the solution.
 - For a change of an important design decision, add a decision record in `docs/adr/`.
 

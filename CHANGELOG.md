@@ -12,4 +12,5 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Apache License 2.0.
 - Store interface with adapters in the design: the shared state can be in Redis, a SQL database, or another store.
 - Continuous integration with build, `go vet`, static analysis, and tests.
-- Requirements, architecture, design documents, decision records, and roadmap for the distributed circuit breaker.
+- Requirements and architecture for the toolkit and its seven policies.
+- Design documents, decision records, and roadmap for the circuit breaker.

@@ -75,8 +75,19 @@ Dependency failure
   → cascading failure      prevented by: circuit breaker
 ```
 
-## 5. Status
+## 5. Pipeline
 
-The circuit breaker is the first component.
-Timeout and retry are the next components, because the breaker rules above need them.
+The application builds the order with `faultvane.Combine`.
+The first argument is the outermost policy.
+
+```go
+pipeline := faultvane.Combine(shedder, limiter, bulkhead, breaker, retrier, timeout)
+```
+
+The library does not change the order that the application gives.
+
+## 6. Status
+
+The circuit breaker is the first policy.
+Timeout and retry follow, because the breaker rules above need them.
 The [roadmap](roadmap.md) gives the order.

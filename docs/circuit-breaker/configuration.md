@@ -118,4 +118,4 @@ The in-memory adapter has no options.
 - Set `OpenDuration` to the usual recovery time of the dependency.
 - Set `ProbeTimeout` longer than the longest possible call. Use a timeout policy to limit the call.
 - A lower `SyncInterval` gives faster propagation and more store load. [Architecture](architecture.md) gives the formula.
-- Use the same configuration for one breaker name in all instances. The library reports a difference. See [failure detection](circuit-breaker/failure-detection.md).
+- Use the same configuration for one breaker name in all instances. The library reports a difference. See [failure detection](failure-detection.md).
