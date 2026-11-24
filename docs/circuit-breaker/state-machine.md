@@ -63,6 +63,9 @@ The state machine is a pure function:
 next(state, event, config, now) → (state, effects)
 ```
 
+In the Go code, the type `circuitbreaker.Record` is this function. Its methods `Report`, `AcquireProbe`, `CompleteProbe`, and `Restore` return the next record. They make no I/O and read no clock.
+The Lua scripts of the Redis adapter are a second implementation.
+
 | Event | Source | Valid in |
 |---|---|---|
 | `Report(generation, calls, failures, slowCalls)` | Synchronizer | `CLOSED` with the same generation |
@@ -94,13 +97,13 @@ The differences are:
 
 - The window is the local window of the instance.
 - The probe limit applies to the instance, not to all instances.
-- Local transitions do not change the authoritative generation. The instance keeps the last authoritative generation that it read.
+- A local transition increases only the generation of the local state. The instance keeps the last authoritative snapshot that it read, and it uses the generation of that snapshot for reconciliation.
 
 [Degraded mode](degraded-mode.md) describes how a local state returns to the authoritative state.
 
 ## 7. Invariants for tests
 
-Property-based tests check these invariants with random event sequences:
+The test `TestMachineInvariants` and the fuzz target `FuzzMachine` check these invariants with random event sequences:
 
 1. The generation never decreases.
 2. The state changes only through T1, T2, T3, or T4.
