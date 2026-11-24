@@ -51,7 +51,7 @@ func (l *Limiter) start(cfg config) {
 	s.localBurst = math.Ceil(burst * (cfg.localRate / cfg.rate))
 	l.shared = s
 	l.rate, l.burst, l.tokens = cfg.localRate, s.localBurst, s.localBurst
-	l.synchronize(context.Background(), whole(math.Ceil(cfg.rate*cfg.syncInterval.Seconds())))
+	l.synchronize(whole(math.Ceil(cfg.rate * cfg.syncInterval.Seconds())))
 	if cfg.manualSync {
 		close(s.done)
 		return
@@ -87,9 +87,9 @@ func (l *Limiter) enterLocal(now time.Time) {
 	l.since, l.tokens = now, min(l.tokens, s.localBurst)
 }
 
-func (l *Limiter) synchronize(ctx context.Context, minimum int64) {
+func (l *Limiter) synchronize(minimum int64) {
 	s := l.shared
-	ctx, cancel := context.WithTimeout(ctx, s.cfg.storeTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), s.cfg.storeTimeout)
 	defer cancel()
 	grant, err := s.cfg.store.Acquire(ctx, s.cfg.name, l.demand(minimum))
 	now := l.clock.Now()
@@ -121,7 +121,7 @@ func (l *Limiter) run() {
 		case <-s.stop:
 			return
 		case <-ticker.C:
-			l.synchronize(context.Background(), 1)
+			l.synchronize(1)
 		}
 	}
 }

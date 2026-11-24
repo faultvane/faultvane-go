@@ -71,7 +71,7 @@ func (f *sharedFixture) limiter(opts ...Option) *Limiter {
 }
 
 func synchronize(limiter *Limiter) {
-	limiter.synchronize(context.Background(), 1)
+	limiter.synchronize(1)
 }
 
 func call(limiter *Limiter, times int) int {
