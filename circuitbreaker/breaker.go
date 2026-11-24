@@ -23,13 +23,14 @@ type view struct {
 }
 
 type Breaker struct {
-	name     string
-	cfg      config
-	origin   time.Time
-	current  atomic.Pointer[view]
-	pending  pending
-	counters counters
-	probing  atomic.Bool
+	name        string
+	cfg         config
+	fingerprint string
+	origin      time.Time
+	current     atomic.Pointer[view]
+	pending     pending
+	counters    counters
+	probing     atomic.Bool
 
 	lastProbeAttempt time.Time
 
@@ -56,7 +57,7 @@ func New(name string, opts ...Option) (*Breaker, error) {
 	if err != nil {
 		return nil, err
 	}
-	b := &Breaker{name: name, cfg: cfg, origin: cfg.clock.Now()}
+	b := &Breaker{name: name, cfg: cfg, fingerprint: cfg.fingerprint(), origin: cfg.clock.Now()}
 	if cfg.store == nil {
 		b.current.Store(b.localView(nil))
 		return b, nil
@@ -66,6 +67,8 @@ func New(name string, opts ...Option) (*Breaker, error) {
 }
 
 func (b *Breaker) Name() string { return b.name }
+
+func (b *Breaker) ConfigFingerprint() string { return b.fingerprint }
 
 func (b *Breaker) State() State { return b.current.Load().state }
 
