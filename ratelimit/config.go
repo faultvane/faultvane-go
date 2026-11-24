@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"fmt"
+	"log/slog"
 	"math"
 	"time"
 
@@ -26,6 +27,9 @@ type config struct {
 	localRate      float64
 	localRateSet   bool
 	faultThreshold int
+	observer       Observer
+	observerSet    bool
+	logger         *slog.Logger
 	manualSync     bool
 }
 
@@ -76,6 +80,17 @@ func WithFaultThreshold(n int) Option {
 	return func(c *config) { c.faultThreshold = n }
 }
 
+func WithObserver(observer Observer) Option {
+	return func(c *config) {
+		c.observer = observer
+		c.observerSet = true
+	}
+}
+
+func WithLogger(logger *slog.Logger) Option {
+	return func(c *config) { c.logger = logger }
+}
+
 func newConfig(opts []Option) (config, error) {
 	c := config{
 		rate:           100,
@@ -83,6 +98,7 @@ func newConfig(opts []Option) (config, error) {
 		syncInterval:   100 * time.Millisecond,
 		storeTimeout:   50 * time.Millisecond,
 		faultThreshold: 3,
+		logger:         slog.Default(),
 	}
 	for _, opt := range opts {
 		opt(&c)
@@ -142,6 +158,10 @@ func (c config) validateStore() error {
 		return invalid("LocalRate", "must be above 0 and at most Rate")
 	case c.faultThreshold < 1:
 		return invalid("FaultThreshold", "must be 1 or more")
+	case c.logger == nil:
+		return invalid("Logger", "must not be nil")
+	case c.observerSet && c.observer == nil:
+		return invalid("Observer", "must not be nil")
 	}
 	return nil
 }

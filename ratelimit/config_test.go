@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"errors"
+	"log/slog"
 	"math"
 	"strings"
 	"testing"
@@ -97,6 +98,27 @@ func TestStoreOptions(t *testing.T) {
 		}
 	})
 
+	t.Run("RL-42 TK-20 the default logger is the default of log/slog and no observer is set", func(t *testing.T) {
+		c, err := newConfig([]Option{WithStore(store), WithName("a")})
+		if err != nil || c.logger != slog.Default() || c.observer != nil {
+			t.Fatalf("logger = %v, observer = %v, err = %v", c.logger, c.observer, err)
+		}
+	})
+
+	t.Run("RL-42 the options set the observer and the logger", func(t *testing.T) {
+		observer := &events{}
+		c, err := newConfig([]Option{WithStore(store), WithName("a"), WithObserver(observer), WithLogger(quiet)})
+		if err != nil || c.logger != quiet || c.observer != Observer(observer) {
+			t.Fatalf("logger = %v, observer = %v, err = %v", c.logger, c.observer, err)
+		}
+	})
+
+	t.Run("RL-42 a limiter without a store ignores the observer and the logger", func(t *testing.T) {
+		if _, err := New(WithObserver(nil), WithLogger(nil)); err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("RL-32 RL-33 RL-34 each store option sets its value", func(t *testing.T) {
 		c, err := newConfig([]Option{
 			WithStore(store), WithName("azAZ09._-"), WithSyncInterval(time.Second), WithStoreTimeout(time.Second - 1),
@@ -139,6 +161,8 @@ func TestStoreOptions(t *testing.T) {
 		"RL-34 local rate above the rate":              {[]Option{WithLocalRate(100.5)}, "LocalRate must be above 0 and at most Rate"},
 		"RL-34 local rate that is NaN":                 {[]Option{WithLocalRate(math.NaN())}, "LocalRate must be above 0 and at most Rate"},
 		"RL-34 fault threshold of zero":                {[]Option{WithFaultThreshold(0)}, "FaultThreshold must be 1 or more"},
+		"RL-42 nil logger":                             {[]Option{WithLogger(nil)}, "Logger must not be nil"},
+		"RL-42 nil observer":                           {[]Option{WithObserver(nil)}, "Observer must not be nil"},
 		"RL-14 invalid rate of a limiter with a store": {[]Option{WithRate(0)}, "Rate must be above 0 and at most 1e9"},
 	}
 	for name, tc := range cases {
