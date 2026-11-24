@@ -34,8 +34,8 @@ jobs:
         run: go build ./...
       - name: Vet
         run: go vet ./...
-      - name: Test
-        run: go test -race -count=1 ./...
+      - name: Test with coverage minimum
+        run: sh scripts/coverage.sh
 
   lint:
     name: Lint
