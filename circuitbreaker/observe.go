@@ -28,6 +28,7 @@ const (
 	Reconciled
 	StoreFault
 	LocalModeExpired
+	ConfigMismatchChanged
 )
 
 func (k EventKind) String() string {
@@ -42,18 +43,21 @@ func (k EventKind) String() string {
 		return "store_fault"
 	case LocalModeExpired:
 		return "local_mode_expired"
+	case ConfigMismatchChanged:
+		return "config_mismatch_changed"
 	}
 	return "unknown"
 }
 
 type Event struct {
-	Kind       EventKind
-	Breaker    string
-	From       State
-	To         State
-	Generation uint64
-	Mode       Mode
-	Err        error
+	Kind           EventKind
+	Breaker        string
+	From           State
+	To             State
+	Generation     uint64
+	Mode           Mode
+	Err            error
+	ConfigMismatch bool
 }
 
 type Observer interface {
@@ -78,6 +82,7 @@ type Stats struct {
 	LocalModeEntries int64
 	Reconciliations  int64
 	LocalModeExpired bool
+	ConfigMismatch   bool
 }
 
 type counters struct {
@@ -96,6 +101,7 @@ type counters struct {
 	localModeEntries atomic.Int64
 	reconciliations  atomic.Int64
 	localModeExpired atomic.Bool
+	configMismatch   atomic.Bool
 }
 
 func (b *Breaker) Stats() Stats {
@@ -118,6 +124,7 @@ func (b *Breaker) Stats() Stats {
 		LocalModeEntries: c.localModeEntries.Load(),
 		Reconciliations:  c.reconciliations.Load(),
 		LocalModeExpired: c.localModeExpired.Load(),
+		ConfigMismatch:   c.configMismatch.Load(),
 	}
 }
 
@@ -154,6 +161,11 @@ func (b *Breaker) log(event Event) {
 		level, message = slog.LevelDebug, "circuit breaker store operation failed"
 	case LocalModeExpired:
 		level, message = slog.LevelError, "circuit breaker local mode is longer than the maximum time"
+	case ConfigMismatchChanged:
+		message = "circuit breaker configuration is equal to the configuration of the last writer again"
+		if event.ConfigMismatch {
+			level, message = slog.LevelWarn, "circuit breaker configuration is different from the configuration of the last writer"
+		}
 	}
 	attrs := []slog.Attr{
 		slog.String("breaker", event.Breaker),
@@ -161,6 +173,9 @@ func (b *Breaker) log(event Event) {
 		slog.String("to", event.To.String()),
 		slog.Uint64("generation", event.Generation),
 		slog.String("mode", event.Mode.String()),
+	}
+	if event.Kind == ConfigMismatchChanged {
+		attrs = append(attrs, slog.String("fingerprint", b.fingerprint), slog.String("stored_fingerprint", b.auth.Fingerprint))
 	}
 	if event.Err != nil {
 		attrs = append(attrs, slog.String("cause", event.Err.Error()))

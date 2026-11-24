@@ -80,6 +80,7 @@ func (b *Breaker) adopt(snapshot Snapshot) {
 	fresh := previous == nil || previous.local || !b.hasAuth || snapshot.Generation != b.auth.Generation || snapshot.State != previous.state
 	wasLocal := previous != nil && previous.local
 	b.auth, b.hasAuth = snapshot, true
+	b.compareConfig(snapshot)
 	if !fresh {
 		return
 	}
@@ -92,6 +93,13 @@ func (b *Breaker) adopt(snapshot Snapshot) {
 	if wasLocal {
 		b.counters.localModeExpired.Store(false)
 		b.emit(Event{Kind: ModeChanged, From: previous.state, To: v.state, Generation: v.generation, Mode: Distributed})
+	}
+}
+
+func (b *Breaker) compareConfig(snapshot Snapshot) {
+	mismatch := snapshot.Fingerprint != "" && snapshot.Fingerprint != b.fingerprint
+	if b.counters.configMismatch.Swap(mismatch) != mismatch {
+		b.emit(Event{Kind: ConfigMismatchChanged, From: snapshot.State, To: snapshot.State, Generation: snapshot.Generation, Mode: Distributed, ConfigMismatch: mismatch})
 	}
 }
 
@@ -141,6 +149,7 @@ func (b *Breaker) report(generation uint64, c counts) Report {
 		WindowBuckets: b.cfg.windowBuckets,
 		OpenDuration:  b.cfg.openDuration,
 		StateTTL:      b.cfg.stateTTL,
+		Fingerprint:   b.fingerprint,
 	}
 }
 

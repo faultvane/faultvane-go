@@ -1,7 +1,12 @@
 package circuitbreaker
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"log/slog"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -103,6 +108,232 @@ func TestConfigFingerprint(t *testing.T) {
 		other, err := New("a-different-name")
 		if err != nil || other.ConfigFingerprint() != base {
 			t.Errorf("a different name gives the fingerprint %q, %v, want %q", other.ConfigFingerprint(), err, base)
+		}
+	})
+}
+
+func mismatchEvents(e *events) []Event {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var found []Event
+	for _, event := range e.list {
+		if event.Kind == ConfigMismatchChanged {
+			found = append(found, event)
+		}
+	}
+	return found
+}
+
+func (f *fleet) assertMismatch(want ...bool) {
+	f.t.Helper()
+	for i, b := range f.breakers {
+		if got := b.Stats().ConfigMismatch; got != want[i] {
+			f.t.Fatalf("instance %d: ConfigMismatch = %v, want %v", i, got, want[i])
+		}
+	}
+}
+
+func TestConfigMismatch(t *testing.T) {
+	different := WithFailureThreshold(6)
+
+	t.Run("FD-8 instances with one configuration find no difference", func(t *testing.T) {
+		f := newFleet(t, 3)
+		for round := range 3 {
+			f.fail(round, 1)
+			f.sync()
+		}
+		f.openAll()
+		f.assertMismatch(false, false, false)
+		for i, e := range f.events {
+			if len(mismatchEvents(e)) != 0 {
+				t.Fatalf("instance %d got a mismatch event", i)
+			}
+		}
+	})
+
+	t.Run("FD-8 OB-6 an instance finds the different configuration of the last writer and reports it one time", func(t *testing.T) {
+		f := newFleet(t, 1)
+		other := f.add(different)
+		f.assertMismatch(false, false)
+		f.fail(0, 1)
+		f.sync(0)
+		f.assertMismatch(false, false)
+		for range 3 {
+			f.sync(1)
+		}
+		f.assertMismatch(false, true)
+		want := []Event{{Kind: ConfigMismatchChanged, Breaker: sharedName, Mode: Distributed, ConfigMismatch: true}}
+		if got := mismatchEvents(f.events[1]); !slices.Equal(got, want) {
+			t.Fatalf("events = %+v, want %+v", got, want)
+		}
+		if f.stored().Fingerprint != f.breakers[0].ConfigFingerprint() || other.ConfigFingerprint() == f.breakers[0].ConfigFingerprint() {
+			t.Fatalf("stored fingerprint = %q, instances have %q and %q", f.stored().Fingerprint, f.breakers[0].ConfigFingerprint(), other.ConfigFingerprint())
+		}
+	})
+
+	t.Run("FD-8 the first writer finds the difference when the different instance writes", func(t *testing.T) {
+		f := newFleet(t, 1)
+		f.add(different)
+		f.fail(0, 1)
+		f.sync(0)
+		f.fail(1, 1)
+		f.sync(1)
+		f.assertMismatch(false, true)
+		if f.stored().Fingerprint != f.breakers[1].ConfigFingerprint() {
+			t.Fatal("the store does not have the fingerprint of the last writer")
+		}
+		f.sync(0)
+		f.assertMismatch(true, true)
+	})
+
+	t.Run("FD-8 a new instance finds the difference at its start", func(t *testing.T) {
+		f := newFleet(t, 1)
+		f.openAll()
+		late := f.add(different)
+		if !late.Stats().ConfigMismatch {
+			t.Fatal("the new instance found no difference")
+		}
+		want := []Event{{Kind: ConfigMismatchChanged, Breaker: sharedName, From: Open, To: Open, Generation: 1, Mode: Distributed, ConfigMismatch: true}}
+		if got := mismatchEvents(f.events[1]); !slices.Equal(got, want) {
+			t.Fatalf("events = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("FD-8 an instance finds the difference in the response of a probe request", func(t *testing.T) {
+		f := newFleet(t, 1)
+		f.add(different)
+		f.openAll()
+		f.assertMismatch(false, true)
+		f.clock.Advance(testOpenDuration)
+		probe, err := f.breakers[1].Allow(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertRejected(t, f.breakers[0], ErrProbeNotPermitted)
+		f.assertMismatch(true, true)
+		probe.Success()
+		f.assertStored(Closed, 3)
+	})
+
+	t.Run("FD-8 OB-6 the difference ends when the last writer has the equal configuration", func(t *testing.T) {
+		f := newFleet(t, 1)
+		f.add(different)
+		f.fail(0, 1)
+		f.sync(0)
+		f.sync(1)
+		f.assertMismatch(false, true)
+		f.fail(1, 1)
+		f.sync(1)
+		f.assertMismatch(false, true)
+		for range 3 {
+			f.sync(1)
+		}
+		f.assertMismatch(false, false)
+		want := []Event{
+			{Kind: ConfigMismatchChanged, Breaker: sharedName, Mode: Distributed, ConfigMismatch: true},
+			{Kind: ConfigMismatchChanged, Breaker: sharedName, Mode: Distributed, ConfigMismatch: false},
+		}
+		if got := mismatchEvents(f.events[1]); !slices.Equal(got, want) {
+			t.Fatalf("events = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("FD-8 DS-9 a stored state without a fingerprint is not a difference", func(t *testing.T) {
+		clock := faultvanetest.NewClock(testStart)
+		f := &fleet{t: t, clock: clock, memory: NewMemoryStore(clock)}
+		f.memory.records[sharedName] = Record{State: Open, Generation: 4, TransitionAt: testStart, OpenDuration: testOpenDuration}
+		f.add()
+		f.sync()
+		f.assertAll(Open, Distributed)
+		f.assertMismatch(false)
+		f.add(different)
+		f.memory.records[sharedName] = Record{Fingerprint: f.breakers[0].ConfigFingerprint()}
+		f.sync()
+		f.assertMismatch(false, true)
+		f.memory.Delete(sharedName)
+		f.sync()
+		f.assertMismatch(false, false)
+		if got := len(mismatchEvents(f.events[1])); got != 2 {
+			t.Fatalf("mismatch events = %d, want 2", got)
+		}
+	})
+
+	t.Run("FD-8 PF-1 PF-2 a difference changes no decision and adds no store operation and no allocation to a call", func(t *testing.T) {
+		f := newFleet(t, 1)
+		b := f.add(different)
+		f.fail(0, 1)
+		f.sync()
+		f.assertMismatch(false, true)
+		before := f.stores[1].operations.Load()
+		ctx := context.Background()
+		call := func(context.Context) error { return nil }
+		if allocations := testing.AllocsPerRun(1000, func() { _ = b.Do(ctx, call) }); allocations != 0 {
+			t.Errorf("%v allocations for each call, want 0", allocations)
+		}
+		if got := f.stores[1].operations.Load(); got != before {
+			t.Errorf("store operations went from %d to %d during calls", before, got)
+		}
+		f.fail(1, 5)
+		f.sync()
+		f.sync()
+		f.assertAll(Open, Distributed)
+		f.assertStored(Open, 1)
+		f.clock.Advance(testOpenDuration)
+		runTimes(t, b, 1, nil)
+		f.assertStored(Closed, 3)
+	})
+
+	t.Run("FD-8 the difference stays while the store is not available", func(t *testing.T) {
+		f := newFleet(t, 1)
+		f.add(different)
+		f.fail(0, 1)
+		f.sync()
+		f.disconnect(1)
+		if f.breakers[1].Mode() != Local {
+			t.Fatal("the instance is not in local mode")
+		}
+		f.assertMismatch(false, true)
+		f.connect(1)
+		f.sync(1)
+		f.assertMismatch(false, true)
+		if got := len(mismatchEvents(f.events[1])); got != 1 {
+			t.Fatalf("mismatch events = %d, want 1", got)
+		}
+	})
+
+	t.Run("OB-6 the breaker logs one record when the difference starts and one when it ends", func(t *testing.T) {
+		var output bytes.Buffer
+		logger := slog.New(slog.NewJSONHandler(&output, &slog.HandlerOptions{Level: slog.LevelInfo}))
+		f := newFleet(t, 1)
+		b := f.add(different, WithLogger(logger))
+		f.fail(0, 1)
+		f.sync(0)
+		f.sync(1)
+		f.sync(1)
+		f.fail(1, 1)
+		f.sync(1)
+		f.sync(1)
+		f.sync(1)
+		type line struct {
+			Level, Msg, Breaker, Mode string
+			Fingerprint               string
+			Stored                    string `json:"stored_fingerprint"`
+		}
+		var lines []line
+		for _, raw := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+			var l line
+			if err := json.Unmarshal([]byte(raw), &l); err != nil {
+				t.Fatal(err)
+			}
+			lines = append(lines, l)
+		}
+		own, first := b.ConfigFingerprint(), f.breakers[0].ConfigFingerprint()
+		want := []line{
+			{"WARN", "circuit breaker configuration is different from the configuration of the last writer", sharedName, "distributed", own, first},
+			{"INFO", "circuit breaker configuration is equal to the configuration of the last writer again", sharedName, "distributed", own, own},
+		}
+		if !slices.Equal(lines, want) {
+			t.Fatalf("log lines:\n%+v\nwant:\n%+v", lines, want)
 		}
 	})
 }

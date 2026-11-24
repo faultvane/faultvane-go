@@ -191,6 +191,7 @@ func (b *Breaker) acquireSharedProbe(ctx context.Context, now time.Time) (Permit
 		Limit:         b.cfg.halfOpenMaxProbes,
 		LeaseDuration: b.cfg.probeTimeout,
 		StateTTL:      b.cfg.stateTTL,
+		Fingerprint:   b.fingerprint,
 	})
 	cancel()
 	if err != nil {
@@ -230,6 +231,7 @@ func (b *Breaker) completeSharedProbe(generation, token uint64, result Result) {
 		SuccessThreshold: b.cfg.halfOpenSuccessThreshold,
 		OpenDuration:     b.cfg.openDuration,
 		StateTTL:         b.cfg.stateTTL,
+		Fingerprint:      b.fingerprint,
 	})
 	cancel()
 	if err != nil {
