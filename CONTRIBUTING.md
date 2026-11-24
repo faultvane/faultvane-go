@@ -101,6 +101,16 @@ sh scripts/mutation.sh
 This command changes one operator of the code at a time and runs the tests of the package. It fails when the mutation score of a policy package is below 90%.
 A full run takes about 25 minutes. To examine one package, give its directory: `sh scripts/mutation.sh retry`.
 
+## Release
+
+Only the owner of the project makes a release. All modules get the same version number.
+
+1. Set the version of the Faultvane modules in each `go.mod` that requires them, and move the `[Unreleased]` section of `CHANGELOG.md` to the version.
+2. Merge this change into `main` and push it.
+3. Start each workflow for this commit: CI, Fuzz, System benchmark, Scenarios, Mutation, and Long run. Continue only when all pass.
+4. Make one tag for each module on this commit: `vX.Y.Z`, `store/redis/vX.Y.Z`, `store/sql/vX.Y.Z`, `store/mongodb/vX.Y.Z`, and `otel/vX.Y.Z`.
+5. Push the tags. A published version cannot change.
+
 ## Rules for code
 
 - Write idiomatic Go. Run `gofmt` and `go vet`.
