@@ -49,6 +49,11 @@ The roadmap adds the commands for integration tests, chaos tests, and benchmarks
 - Use the same word for the same thing. The [glossary](docs/README.md#glossary) defines the terms.
 - When behavior changes, update the related document in the same change.
 
+## License of contributions
+
+The project has the Apache License 2.0.
+When you send a change, you agree that your contribution has the same license.
+
 ## Compatibility
 
 These items are commitments after version 1.0:

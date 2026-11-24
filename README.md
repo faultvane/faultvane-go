@@ -92,5 +92,6 @@ Report a vulnerability as [SECURITY.md](SECURITY.md) describes.
 
 ## License
 
-The license is not selected yet.
-Until the repository contains a `LICENSE` file, all rights are reserved.
+Copyright 2026 The Faultvane Authors.
+
+Faultvane has the [Apache License 2.0](LICENSE).
