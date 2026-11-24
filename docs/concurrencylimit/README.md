@@ -3,7 +3,7 @@
 The concurrency limiter limits the number of calls that run at the same time for one dependency.
 It adapts the limit to the results of the calls.
 
-Status: implemented in the package `concurrencylimit`. The limiter has no metrics, no logs, and no observer yet.
+Status: implemented in the package `concurrencylimit`.
 
 | Document | Content |
 |---|---|
@@ -28,6 +28,7 @@ func New(opts ...Option) (*Limiter, error)
 func (l *Limiter) Do(ctx context.Context, call func(context.Context) error) error
 func (l *Limiter) Limit() int
 func (l *Limiter) InFlight() int
+func (l *Limiter) Stats() Stats
 
 var ErrLimitExceeded error
 ```
@@ -38,6 +39,7 @@ var ErrLimitExceeded error
 | `Do` | Runs the call when the calls in progress are below the limit. After the call, it adapts the limit. It returns the error of the call without a change. |
 | `Limit` | Returns the effective limit at this moment. |
 | `InFlight` | Returns the number of calls in progress. |
+| `Stats` | Returns the counts, the limit, and the calls in progress. |
 | `ErrLimitExceeded` | The rejection error. It matches `faultvane.ErrRejected`. |
 
 `*Limiter` implements `faultvane.Policy`.
@@ -78,13 +80,42 @@ limiter, err := concurrencylimit.New(
 )
 ```
 
-### Status for metrics
+### Statistics and metrics
 
 ```go
-fmt.Println(limiter.Limit(), limiter.InFlight())
+stats := limiter.Stats()
 ```
 
-Read these values at an interval and export them as gauges.
+`Stats` returns a value of the type `Stats`. All counts start at 0 for a new instance and only increase.
+
+| Field of `Stats` | Content |
+|---|---|
+| `Permitted` | The number of calls that the limiter permitted. |
+| `Rejected` | The number of calls that returned `ErrLimitExceeded`. |
+| `Decreases` | The number of overload signals. Each overload signal decreases the limit, or keeps it at `MinLimit`. |
+| `Limit` | The effective limit at this moment. |
+| `InFlight` | The number of calls in progress at this moment. |
+
+A call whose context has ended before the decision changes no count.
+Each count is one atomic value. To count makes no memory allocation and uses no lock.
+
+The module `github.com/faultvane/faultvane-go/otel` exports these values as OpenTelemetry metrics:
+
+```go
+registration, err := faultvaneotel.RegisterConcurrencyLimitMetrics(meter, "payment", limiter)
+```
+
+| Metric | Type | Attributes | Content |
+|---|---|---|---|
+| `faultvane.concurrency_limit.calls` | Counter | `result`: `permitted` or `rejected` | `Permitted` and `Rejected` |
+| `faultvane.concurrency_limit.limit_decreases` | Counter | None | `Decreases` |
+| `faultvane.concurrency_limit.limit` | Gauge | None | `Limit` |
+| `faultvane.concurrency_limit.in_flight` | Gauge | None | `InFlight` |
+
+Each metric also has the attribute `faultvane.policy.name`. Its value is the name that you give to the function. Use a small, fixed set of names.
+The metrics read `Stats` when the reader collects them. They add no work to a call.
+`registration.Unregister()` removes the metrics.
+The policy writes no logs, because it has no state transitions and no faults. It has no observer.
 
 ## 3. Options
 
@@ -187,7 +218,7 @@ pipeline := faultvane.Combine(shedder, rateLimiter, limiter, breaker, retrier, t
 
 ## 7. Design
 
-The limiter has two atomic values and no lock.
+The limiter has two atomic values for the decision, three atomic counters for `Stats`, and no lock.
 
 | Value | Content | Change |
 |---|---|---|
@@ -240,4 +271,4 @@ A real call to a dependency takes much longer than the limiter.
 - `LatencyThreshold` is a fixed value. The limiter does not learn the normal latency of the dependency.
 - The limiter has no queue. A caller does not wait for a free place.
 - A panic of the call gives no signal.
-- The limiter does not report events to an observer yet. Use `Limit` and `InFlight` for metrics.
+- The limiter writes no logs and has no observer. Use `Stats` and the metrics.

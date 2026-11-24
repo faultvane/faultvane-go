@@ -19,6 +19,7 @@ import "github.com/faultvane/faultvane-go/timeout"
 |---|---|---|
 | `New` | `func New(d time.Duration) (*Timeout, error)` | Create a timeout with the time limit `d`. |
 | `Do` | `func (t *Timeout) Do(ctx context.Context, call func(context.Context) error) error` | Run the call with the time limit. |
+| `Stats` | `func (t *Timeout) Stats() Stats` | Return the counts of the policy instance. |
 | `ErrTimeout` | `var ErrTimeout error` | The error that shows that the time limit ended. |
 
 `*Timeout` implements `faultvane.Policy`.
@@ -56,6 +57,38 @@ user, err := faultvane.Execute(ctx, limit, func(ctx context.Context) (User, erro
     return repository.Find(ctx, id)
 })
 ```
+
+### Statistics and metrics
+
+```go
+stats := limit.Stats()
+```
+
+`Stats` returns a value of the type `Stats`. All counts start at 0 for a new instance and only increase.
+
+| Field of `Stats` | Content |
+|---|---|
+| `Calls` | The number of calls that the policy ran. |
+| `Timeouts` | The number of calls that returned `ErrTimeout`. A call that the caller cancels is not a timeout. |
+
+The policy counts each call of `Do`.
+Each count is one atomic value. To count makes no memory allocation and uses no lock.
+
+The module `github.com/faultvane/faultvane-go/otel` exports these values as OpenTelemetry metrics:
+
+```go
+registration, err := faultvaneotel.RegisterTimeoutMetrics(meter, "payment", limit)
+```
+
+| Metric | Type | Attributes | Content |
+|---|---|---|---|
+| `faultvane.timeout.calls` | Counter | None | `Calls` |
+| `faultvane.timeout.timeouts` | Counter | None | `Timeouts` |
+
+Each metric also has the attribute `faultvane.policy.name`. Its value is the name that you give to the function. Use a small, fixed set of names.
+The metrics read `Stats` when the reader collects them. They add no work to a call.
+`registration.Unregister()` removes the metrics.
+The policy writes no logs, because it has no state transitions and no faults. It has no observer.
 
 ## 2. Configuration
 
@@ -146,7 +179,7 @@ pipeline := faultvane.Combine(breaker, retrier, limit)
 
 ## 5. Performance
 
-The policy has no state that changes and uses no lock.
+The only state that changes is the two counters of `Stats`. The policy uses no lock.
 A call makes 4 allocations. They are for the context of the call and its timer.
 For this reason the timeout does not satisfy the zero allocation rule TK-50. A test asserts the limit of 4 allocations.
 
@@ -170,4 +203,4 @@ go test -run '^$' -bench . -benchmem ./timeout
 - The policy does not know if the dependency completed the work before the time limit ended.
 - When an error of the call and the end of the time limit occur at almost the same time, the result can be a timeout error. It contains the error of the call.
 - The time limit is fixed for the life of a policy instance. For a different time limit, create a second instance.
-- The policy has no metrics, no logs, and no observer yet.
+- The policy writes no logs and has no observer. Use `Stats` and the metrics.

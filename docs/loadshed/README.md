@@ -26,6 +26,7 @@ The package is `github.com/faultvane/faultvane-go/loadshed`.
 | `New(opts ...Option) (*Shedder, error)` | Makes a shedder. It returns an error when the configuration is invalid. |
 | `(*Shedder).Do(ctx, call) error` | Runs the call when the shedder admits it. A `Shedder` is a `faultvane.Policy`. |
 | `(*Shedder).InFlight() int` | Returns the number of calls in progress. |
+| `(*Shedder).Stats() Stats` | Returns the counts for each priority and the calls in progress. |
 | `Priority` | The type of a priority. The levels are `Critical`, `High`, `Normal`, and `Low`. |
 | `WithPriority(ctx, p) context.Context` | Returns a context that has the priority `p`. |
 | `PriorityFrom(ctx) Priority` | Returns the priority of a context. |
@@ -69,6 +70,39 @@ A value that is not one of the four levels is also `Normal`.
 ```go
 inProgress := shedder.InFlight()
 ```
+
+### Statistics and metrics
+
+```go
+stats := shedder.Stats()
+```
+
+`Stats` returns a value of the type `Stats`. All counts start at 0 for a new instance and only increase.
+
+| Field of `Stats` | Content |
+|---|---|
+| `Admitted` | The number of admitted calls for each priority. Use a priority as the index, for example `stats.Admitted[loadshed.High]`. |
+| `Shed` | The number of calls that returned `ErrShed` for each priority, with the same index. |
+| `InFlight` | The number of calls in progress at this moment. |
+
+A call whose context has ended before the decision changes no count.
+Each count is one atomic value. To count makes no memory allocation and uses no lock.
+
+The module `github.com/faultvane/faultvane-go/otel` exports these values as OpenTelemetry metrics:
+
+```go
+registration, err := faultvaneotel.RegisterLoadShedMetrics(meter, "api", shedder)
+```
+
+| Metric | Type | Attributes | Content |
+|---|---|---|---|
+| `faultvane.load_shed.calls` | Counter | `result`: `admitted` or `shed`. `priority`: `critical`, `high`, `normal`, or `low` | `Admitted` and `Shed` |
+| `faultvane.load_shed.in_flight` | Gauge | None | `InFlight` |
+
+Each metric also has the attribute `faultvane.policy.name`. Its value is the name that you give to the function. Use a small, fixed set of names.
+The metrics read `Stats` when the reader collects them. They add no work to a call.
+`registration.Unregister()` removes the metrics.
+The policy writes no logs, because it has no state transitions and no faults. It has no observer.
 
 ## 3. Options
 
@@ -148,4 +182,4 @@ Thus the time of retries and of slow dependencies adds to the load that the shed
 - The maximum is fixed. It does not adapt to the measured latency.
 - With a small maximum, some thresholds give the same number of calls. For example, with a maximum of 1, the shedder admits each priority only when no call is in progress.
 - A nested call through the same shedder counts as two calls in progress.
-- All goroutines change one counter. The benchmark `BenchmarkDoAdmittedParallel` in `loadshed/bench_test.go` measures the cost of this contention.
+- All goroutines change the counter of the calls in progress and the counters of `Stats`. The benchmark `BenchmarkDoAdmittedParallel` in `loadshed/bench_test.go` measures the cost of this contention.

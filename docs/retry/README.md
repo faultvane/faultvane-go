@@ -20,6 +20,7 @@ import "github.com/faultvane/faultvane-go/retry"
 |---|---|---|
 | `New` | `func New(opts ...Option) (*Retry, error)` | Create a retry policy. |
 | `Do` | `func (r *Retry) Do(ctx context.Context, call func(context.Context) error) error` | Run the call, and run it again after an error. |
+| `Stats` | `func (r *Retry) Stats() Stats` | Return the counts of the policy instance. |
 | `Option` | `type Option func(*config)` | One configuration value. |
 
 `*Retry` implements `faultvane.Policy`.
@@ -60,6 +61,45 @@ user, err := faultvane.Execute(ctx, retrier, func(ctx context.Context) (User, er
     return repository.Find(ctx, id)
 })
 ```
+
+### Statistics and metrics
+
+```go
+stats := retrier.Stats()
+```
+
+`Stats` returns a value of the type `Stats`. All counts start at 0 for a new instance and only increase.
+
+| Field of `Stats` | Content |
+|---|---|
+| `Calls` | The number of calls of `Do`. This is also the number of first attempts. |
+| `Retries` | The number of attempts after the first attempt. |
+| `Failed` | The number of calls of `Do` that returned an error. |
+| `GateStops` | The number of calls that the gate stopped before a retry. |
+| `BudgetStops` | The number of calls that an empty budget stopped before a retry. |
+
+A call that stops because of a final error, the last attempt, or the end of its context is in `Failed` only. When the gate is closed and the budget is empty, the call is a stop by the gate.
+Each count is one atomic value. To count makes no memory allocation and uses no lock.
+All goroutines change the counter of `Calls`. Section 5 gives the cost of this contention.
+
+The module `github.com/faultvane/faultvane-go/otel` exports these values as OpenTelemetry metrics:
+
+```go
+registration, err := faultvaneotel.RegisterRetryMetrics(meter, "payment", retrier)
+```
+
+| Metric | Type | Attributes | Content |
+|---|---|---|---|
+| `faultvane.retry.calls` | Counter | None | `Calls` |
+| `faultvane.retry.retries` | Counter | None | `Retries` |
+| `faultvane.retry.failed_calls` | Counter | None | `Failed` |
+| `faultvane.retry.gate_stops` | Counter | None | `GateStops` |
+| `faultvane.retry.budget_stops` | Counter | None | `BudgetStops` |
+
+Each metric also has the attribute `faultvane.policy.name`. Its value is the name that you give to the function. Use a small, fixed set of names.
+The metrics read `Stats` when the reader collects them. They add no work to a call.
+`registration.Unregister()` removes the metrics.
+The policy writes no logs, because it has no state transitions and no faults. It has no observer.
 
 ## 2. Options
 
@@ -208,7 +248,7 @@ The protections of the composition document map to the policy in this way:
 ## 5. Performance
 
 A request with a successful first attempt makes no allocation and uses no lock.
-The budget is one atomic value.
+The budget is one atomic value. Each count of `Stats` is one atomic value.
 The wait before a retry uses a timer, and the timer makes allocations.
 
 Measured on an Apple M4 with 10 cores, Go 1.27.3, one run. The benchmarks replace the wait with a function that returns immediately.
@@ -217,9 +257,13 @@ Measured on an Apple M4 with 10 cores, Go 1.27.3, one run. The benchmarks replac
 |---|---|---|
 | `Do`, success, no budget, one goroutine | 2.4 ns | 0 |
 | `Do`, success, with budget, one goroutine | 3.1 ns | 0 |
-| `Do`, success, with budget, 10 goroutines in parallel | 0.5 ns | 0 |
+| `Do`, success, with budget, 10 goroutines in parallel | 51 ns | 0 |
 | `Do`, three failed attempts, no budget, one goroutine | 33 ns | 0 |
 | `Do`, failure with an empty budget, 10 goroutines in parallel | 227 ns | 0 |
+
+The value of the parallel benchmark with successful calls was 0.5 ns before the policy had counters.
+All goroutines now change the counter of `Calls`. This benchmark runs an empty call, so it shows the worst condition.
+The values of the other rows are from the measurement before the counters. A new measurement on a machine with other load showed no clear difference for these rows.
 
 Run the benchmarks:
 
@@ -235,4 +279,5 @@ go test -run '^$' -bench . -benchmem ./retry
 - When all requests fail and the budget is empty, all goroutines change the same atomic value. The last benchmark shows the cost of this contention.
 - The gate is read before the wait. The state of the application can change during the wait.
 - The policy does not read a wait time that a dependency gives, for example a `Retry-After` header.
-- The policy has no metrics, no logs, and no observer yet.
+- All goroutines change the counter of `Calls`. The benchmark with successful calls in parallel shows the cost of this contention.
+- The policy writes no logs and has no observer. Use `Stats` and the metrics.

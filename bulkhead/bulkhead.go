@@ -17,9 +17,12 @@ type waiter struct {
 type Bulkhead struct {
 	cfg config
 
-	mu       sync.Mutex
-	inFlight int
-	waiters  list.List
+	mu        sync.Mutex
+	inFlight  int
+	waiters   list.List
+	permitted int64
+	rejected  int64
+	waited    int64
 }
 
 var _ faultvane.Policy = (*Bulkhead)(nil)
@@ -59,13 +62,16 @@ func (b *Bulkhead) acquire(ctx context.Context) error {
 	b.mu.Lock()
 	if b.inFlight < b.cfg.maxConcurrent {
 		b.inFlight++
+		b.permitted++
 		b.mu.Unlock()
 		return nil
 	}
 	if b.waiters.Len() >= b.cfg.maxWaiting {
+		b.rejected++
 		b.mu.Unlock()
 		return ErrFull
 	}
+	b.waited++
 	w := &waiter{ready: make(chan struct{})}
 	place := b.waiters.PushBack(w)
 	b.mu.Unlock()
@@ -87,12 +93,14 @@ func (b *Bulkhead) wait(ctx context.Context, w *waiter, place *list.Element) err
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if w.granted {
+		b.permitted++
 		return nil
 	}
 	b.waiters.Remove(place)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	b.rejected++
 	return ErrFull
 }
 

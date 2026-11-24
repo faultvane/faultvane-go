@@ -11,6 +11,8 @@ type Shedder struct {
 	maxInFlight float64
 	thresholds  [priorities]float64
 	inFlight    atomic.Int64
+	admitted    [priorities]atomic.Int64
+	shed        [priorities]atomic.Int64
 }
 
 var _ faultvane.Policy = (*Shedder)(nil)
@@ -29,9 +31,11 @@ func (s *Shedder) admit(p Priority) bool {
 	for {
 		inFlight := s.inFlight.Load()
 		if float64(inFlight)/s.maxInFlight >= s.thresholds[p] {
+			s.shed[p].Add(1)
 			return false
 		}
 		if s.inFlight.CompareAndSwap(inFlight, inFlight+1) {
+			s.admitted[p].Add(1)
 			return true
 		}
 	}
