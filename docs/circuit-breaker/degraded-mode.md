@@ -11,16 +11,24 @@ Each store operation has a strict timeout. The default is 100 ms.
 An error or a timeout is a store fault.
 
 The instance changes to local mode after 3 store faults in sequence.
-This number is configurable.
+A successful store operation sets the count back to 0.
+The option `WithFaultThreshold` sets this number.
 
-In local mode, the synchronizer sends a health check with exponential backoff and jitter.
-The backoff starts at 250 ms and has a maximum of 5 seconds.
+In local mode, the synchronizer sends a health check at an interval that increases.
+A health check is a read of the authoritative state.
+
+- The wait before a health check has an upper limit. The limit starts at half of the sync interval.
+- After each health check, the limit doubles, up to 10 times the sync interval.
+- Each wait is a random time between half of the limit and the limit.
+
+With the default sync interval of 500 ms, the limit starts at 250 ms and has a maximum of 5 seconds.
+
 Only the synchronizer goroutine sends health checks.
-The request path does not call the store in local mode, and it does not wait for the store.
+The request path does not request a probe from the store in local mode, and it does not wait for the store.
 
 The results are:
 
-- A store fault never blocks an application request for longer than one store timeout. Only a probe attempt can wait for that time.
+- A store fault never blocks an application request for longer than one store timeout. Only two operations can wait for that time: a probe request before the call, and the result of a probe after the call.
 - The number of store operations during an outage has a limit. There is no retry storm.
 
 ## 2. Behavior in local mode
@@ -31,10 +39,19 @@ When the instance enters local mode, its local state starts from the last snapsh
 |---|---|
 | `CLOSED` | The instance evaluates the failure condition on its local window. It can open its local circuit. |
 | `OPEN` | The instance stays `OPEN` until the open duration ends. Then it changes to a local `HALF_OPEN`. |
-| `HALF_OPEN` | A probe with a lease continues. Its result applies to the local state. Other calls use the local probe limit. |
+| `HALF_OPEN` | The instance starts a local `HALF_OPEN` state with no leases. New calls use the local probe limit. A probe that holds a lease from the store loses its result. See below. |
 
 The local window already contains the recent calls of the instance, because the request path always writes to it.
 The change to local mode loses no local data.
+
+### A probe that holds a lease from the store
+
+A call can hold a probe lease from the store at the time when its instance changes to local mode.
+When that call ends, the instance sends its result to the store, with the store timeout as the limit.
+The result does not go to the local state.
+
+- When the store does not answer, the result is lost. The lease in the store ends at its end time.
+- The local `HALF_OPEN` state has its own leases. The next call gets a local probe and tests the dependency again.
 
 ### Thresholds in local mode
 
@@ -42,28 +59,36 @@ In local mode, one instance sees only its own part of the traffic.
 A failure count threshold that fits the sum of all instances can be too high for one instance.
 The rate thresholds do not have this problem.
 
-For this reason, local mode has two optional overrides: `LocalFailureThreshold` and `LocalMinimumCalls`.
+For this reason, local mode has two optional overrides: `WithLocalFailureThreshold` and `WithLocalMinimumCalls`.
 Without an override, local mode uses the normal values.
 
 ### Generation in local mode
 
-A local transition does not change the generation.
-The instance keeps the generation of its last snapshot.
+The instance keeps its last authoritative snapshot separately from its local state.
+A local transition increases only the generation of the local state.
+It does not change the last authoritative snapshot, and no operation sends the local generation to the store.
+Reconciliation uses the generation of the last authoritative snapshot.
 The local state is never an authoritative state, and it is never the input of `Restore`.
+
+`State` and the events show the local state and the local generation while the instance is in local mode.
 
 ## 3. Time limit of local mode
 
-`MaxLocalFallbackDuration` is the maximum time in local mode. The default is 5 minutes.
-After this time, the instance applies the `LocalModeExpiredPolicy`:
+`WithMaxLocalFallbackDuration` sets the maximum time in local mode. The default is 5 minutes.
+The synchronizer examines this time before each health check.
+After this time, the instance applies the policy of `WithLocalModeExpiredPolicy`:
 
 | Policy | Behavior | Use |
 |---|---|---|
-| `KeepLocalBreaker` (default) | The local breaker continues. The instance logs an error and sets a metric. | The store is an aid. A long store outage must not stop the application. |
-| `RejectAll` | The breaker rejects all calls. | The dependency is fragile. Uncoordinated traffic is worse than no traffic. |
+| `KeepLocalBreaker` (default) | The local breaker continues. The instance logs an error and sets `LocalModeExpired` in `Stats`. | The store is an aid. A long store outage must not stop the application. |
+| `RejectAll` | The breaker rejects all calls with `ErrCircuitOpen`. | The dependency is fragile. Uncoordinated traffic is worse than no traffic. |
 | `AllowAll` | The breaker permits all calls and does not record results. | The call has its own protection. |
 
 The default continues to protect the dependency, and it does not make the store a single point of failure.
 The local state stays a non-authoritative state under each policy.
+Each policy logs the error and sets `LocalModeExpired`. The health checks continue under each policy.
+
+With `WithLocalFallback(false)`, the instance applies the policy immediately when it changes to local mode.
 
 ## 4. Start without a store connection
 
@@ -83,8 +108,9 @@ It sends one call to find out.
 ## 5. Reconciliation
 
 Reconciliation starts when a health check succeeds.
-Each instance waits a random time, up to one sync interval, before it starts.
-This prevents a burst of operations on a store that just recovered.
+The health check is the first step of the reconciliation: its response is the authoritative state A.
+The instance does not wait before the next steps.
+The random wait before each health check spreads the reconciliations of many instances in time.
 
 The instance has these values:
 
@@ -94,13 +120,13 @@ The instance has these values:
 
 ```mermaid
 flowchart TD
-    R[Read authoritative state A] --> Q1{No stored state<br/>or ga < gs?}
+    R[Read authoritative state A] --> Q1{ga < gs?<br/>no stored state is ga = 0}
     Q1 -- yes --> RS[Restore S<br/>the store keeps the highest generation] --> R2[Use the response as A]
     Q1 -- no --> Q2
     R2 --> Q2{ga > gs?}
     Q2 -- yes --> AD[Adopt A<br/>discard L and pending counts]
     Q2 -- no, equal --> Q3{A is CLOSED?}
-    Q3 -- yes --> RP[Send pending counts as a report<br/>adopt the response]
+    Q3 -- yes --> RP[Send the limited pending counts as a report<br/>adopt the response]
     Q3 -- no --> AD2[Adopt A<br/>discard pending counts]
     AD --> DM[Distributed mode]
     RP --> DM
@@ -111,7 +137,7 @@ Rules:
 
 1. **The instance always adopts the authoritative state.** After reconciliation, the snapshot is the response from the store.
 2. **The instance never writes its local state.** No operation copies L to the store.
-3. **The instance adds only evidence.** When the generation did not change and the authoritative state is `CLOSED`, the instance sends the pending counts that are still in the window. This is a normal report. The store evaluates the failure condition on the sum of all reports.
+3. **The instance adds only evidence.** When the generation did not change and the authoritative state is `CLOSED`, the instance sends its pending counts. It limits each count to the total that is still in its last local `CLOSED` window. Older counts are not sent. This is a normal report. The store evaluates the failure condition on the sum of all reports. When the limited counts are 0, the instance sends no report.
 4. **Only a probe closes a circuit.** A local `CLOSED` state has no effect on an authoritative `OPEN` or `HALF_OPEN` state.
 5. **Only `Restore` writes a full state, and only an authoritative snapshot.** The store accepts it only when its generation is higher than the stored generation.
 
@@ -166,7 +192,7 @@ A partition does not cause retries without a limit, blocked request goroutines, 
 
 | Fault | Detection | Behavior |
 |---|---|---|
-| The store is down | Connection error | Local mode after the fault threshold. |
+| The store is down | Error of the adapter | Local mode after the fault threshold. |
 | The store is slow | Store timeout | The same as a store that is down. The request path does not wait. |
 | The store restarts with data loss | Generation lower than the snapshot, or no stored state | `Restore` with the highest authoritative snapshot. |
 | The store fails over | Errors during the failover, possibly an older generation after it | Local mode during the failover, then reconciliation and `Restore` when necessary. |
