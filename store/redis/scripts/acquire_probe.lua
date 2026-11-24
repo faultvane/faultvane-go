@@ -10,6 +10,7 @@ if s.st == 2 then
     redis.call('ZADD', KEYS[3], number(now + tonumber(ARGV[3])), ARGV[1])
     granted = 1
   end
+  s.fp = ARGV[5]
   save(s, ARGV[4])
 end
 return reply(s, now, granted)

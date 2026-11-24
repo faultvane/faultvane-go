@@ -113,11 +113,15 @@ func integer(value any) (int64, error) {
 
 func parse(raw any) (circuitbreaker.Snapshot, bool, error) {
 	values, ok := raw.([]any)
-	if !ok || len(values) != 6 {
+	if !ok || len(values) != 7 {
+		return circuitbreaker.Snapshot{}, false, fmt.Errorf("unexpected reply %v", raw)
+	}
+	fingerprint, ok := values[6].(string)
+	if !ok {
 		return circuitbreaker.Snapshot{}, false, fmt.Errorf("unexpected reply %v", raw)
 	}
 	var fields [6]int64
-	for i, value := range values {
+	for i, value := range values[:6] {
 		field, err := integer(value)
 		if err != nil {
 			return circuitbreaker.Snapshot{}, false, fmt.Errorf("unexpected reply %v: %w", raw, err)
@@ -130,6 +134,7 @@ func parse(raw any) (circuitbreaker.Snapshot, bool, error) {
 		TransitionAt: time.UnixMicro(fields[2]),
 		OpenDuration: time.Duration(fields[3]) * time.Microsecond,
 		StoreTime:    time.UnixMicro(fields[4]),
+		Fingerprint:  fingerprint,
 	}, fields[5] == 1, nil
 }
 
@@ -157,14 +162,14 @@ func (s *Store) Report(ctx context.Context, name string, report circuitbreaker.R
 		strconv.FormatFloat(report.Thresholds.FailureRate, 'g', -1, 64),
 		strconv.FormatFloat(report.Thresholds.SlowCallRate, 'g', -1, 64),
 		micros(report.WindowSize/time.Duration(report.WindowBuckets)), report.WindowBuckets,
-		micros(report.OpenDuration), millis(report.StateTTL),
+		micros(report.OpenDuration), millis(report.StateTTL), report.Fingerprint,
 	)
 	return snapshot, err
 }
 
 func (s *Store) AcquireProbe(ctx context.Context, name string, request circuitbreaker.ProbeRequest) (circuitbreaker.ProbeGrant, error) {
 	snapshot, granted, err := s.run(ctx, "acquire probe", acquireProbeScript, name,
-		strconv.FormatUint(request.Token, 10), request.Limit, micros(request.LeaseDuration), millis(request.StateTTL),
+		strconv.FormatUint(request.Token, 10), request.Limit, micros(request.LeaseDuration), millis(request.StateTTL), request.Fingerprint,
 	)
 	return circuitbreaker.ProbeGrant{Snapshot: snapshot, Granted: granted}, err
 }
@@ -172,7 +177,7 @@ func (s *Store) AcquireProbe(ctx context.Context, name string, request circuitbr
 func (s *Store) CompleteProbe(ctx context.Context, name string, result circuitbreaker.ProbeResult) (circuitbreaker.Snapshot, error) {
 	snapshot, _, err := s.run(ctx, "complete probe", completeProbeScript, name,
 		result.Generation, strconv.FormatUint(result.Token, 10), int(result.Result), result.SuccessThreshold,
-		micros(result.OpenDuration), millis(result.StateTTL),
+		micros(result.OpenDuration), millis(result.StateTTL), result.Fingerprint,
 	)
 	return snapshot, err
 }

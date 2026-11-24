@@ -29,6 +29,7 @@ if s.st == 0 and s.gen == tonumber(ARGV[1]) then
   if exceeded then
     transition(s, 1, now, tonumber(ARGV[11]))
   end
+  s.fp = ARGV[13]
   save(s, ARGV[12])
 end
 return reply(s, now)

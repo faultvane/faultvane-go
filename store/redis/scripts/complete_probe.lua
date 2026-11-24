@@ -13,6 +13,7 @@ if s.st == 2 and s.gen == tonumber(ARGV[1]) then
       end
     end
   end
+  s.fp = ARGV[7]
   save(s, ARGV[6])
 end
 return reply(s, now)
