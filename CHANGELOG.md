@@ -6,9 +6,14 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-25
+
+The shared rate limit and the transition notifications stay experimental.
+
 ### Added
 
 - Stores for the shared rate limit with PostgreSQL, MySQL, and MongoDB: `sqlstore.NewRateLimitStore` and `mongostore.NewRateLimitStore`. The type `ratelimit.Bucket` has the bucket calculation for stores written in Go.
+- The banner and the icon of the project, issue templates, and a pull request template.
 - Tests of the Redis adapter with a Redis Cluster of 3 nodes: breakers and rate limits on each node, a notification between two nodes, and a slot move.
 
 ### Fixed
