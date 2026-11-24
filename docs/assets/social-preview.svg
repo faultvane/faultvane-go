@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="Faultvane: a resilience toolkit for Go. Seven policies that keep a service stable when a dependency fails.">
+  <title>Faultvane: a resilience toolkit for Go. Seven policies that keep a service stable when a dependency fails.</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14263D"/><stop offset="1" stop-color="#0A121F"/></linearGradient>
+    <radialGradient id="glow" cx="1030" cy="320" r="480" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFB020" stop-opacity="0.30"/><stop offset="1" stop-color="#FFB020" stop-opacity="0"/></radialGradient>
+    <linearGradient id="title" x1="0" y1="0" x2="1" y2="0"><stop offset="0.35" stop-color="#FFFFFF"/><stop offset="1" stop-color="#FFD58A"/></linearGradient>
+    <linearGradient id="hub" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFC24A"/><stop offset="1" stop-color="#F09A00"/></linearGradient>
+    <clipPath id="frame"><rect width="1280" height="640" rx="0"/></clipPath>
+  </defs>
+  <g clip-path="url(#frame)">
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <g stroke="#FFFFFF" stroke-opacity="0.035" stroke-width="1"><path d="M80 0V640" /><path d="M160 0V640" /><path d="M240 0V640" /><path d="M320 0V640" /><path d="M400 0V640" /><path d="M480 0V640" /><path d="M560 0V640" /><path d="M640 0V640" /><path d="M720 0V640" /><path d="M800 0V640" /><path d="M880 0V640" /><path d="M960 0V640" /><path d="M1040 0V640" /><path d="M1120 0V640" /><path d="M1200 0V640" /><path d="M0 80H1280" /><path d="M0 160H1280" /><path d="M0 240H1280" /><path d="M0 320H1280" /><path d="M0 400H1280" /><path d="M0 480H1280" /><path d="M0 560H1280" /></g>
+  <rect width="1280" height="640" fill="url(#glow)"/>
+  <text x="84" y="268" font-family="Inter, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="104" font-weight="700" letter-spacing="-3" fill="url(#title)">Faultvane</text>
+  <text x="86" y="338" font-family="Inter, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="34" font-weight="400" fill="#D6E0EC">A resilience toolkit for Go.</text>
+  <text x="86" y="386" font-family="Inter, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="34" font-weight="400" fill="#D6E0EC">Stay stable <tspan font-weight="700" fill="#FFB020">when a dependency fails</tspan>.</text>
+  <rect x="86" y="430" width="152" height="46" rx="23.0" fill="#FFFFFF" fill-opacity="0.05" stroke="#FFB020" stroke-opacity="0.45"/><text x="162" y="460" text-anchor="middle" font-family="Inter, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="20" font-weight="500" fill="#FFFFFF">7 policies</text>
+  <rect x="250.0" y="430" width="174" height="46" rx="23.0" fill="#FFFFFF" fill-opacity="0.05" stroke="#FFB020" stroke-opacity="0.45"/><text x="337" y="460" text-anchor="middle" font-family="Inter, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="20" font-weight="500" fill="#FFFFFF">Shared state</text>
+  <rect x="436.4" y="430" width="320" height="46" rx="23.0" fill="#FFFFFF" fill-opacity="0.05" stroke="#FFB020" stroke-opacity="0.45"/><text x="596" y="460" text-anchor="middle" font-family="Inter, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="20" font-weight="500" fill="#FFFFFF">Core without dependencies</text>
+  <circle cx="1030" cy="320" r="186.0" fill="none" stroke="#FFB020" stroke-opacity="0.28" stroke-width="2.5" stroke-dasharray="4.7 10.8"/>
+  <path d="M1030.0 227.0L1030.0 154.2" stroke="#FFB020" stroke-opacity="0.55" stroke-width="3.1" stroke-linecap="round"/>
+  <path d="M1102.7 262.0L1159.7 216.6" stroke="#FFB020" stroke-opacity="0.55" stroke-width="3.1" stroke-linecap="round"/>
+  <path d="M1120.7 340.7L1147.9 346.9" stroke="#FFB020" stroke-opacity="0.55" stroke-width="3.1" stroke-linecap="round"/>
+  <path d="M1169.0 351.7L1191.7 356.9" stroke="#FF6B6B" stroke-opacity="0.75" stroke-width="3.1" stroke-linecap="round" stroke-dasharray="3.1 7.8"/>
+  <path d="M1070.4 403.8L1102.0 469.4" stroke="#FFB020" stroke-opacity="0.55" stroke-width="3.1" stroke-linecap="round"/>
+  <path d="M989.6 403.8L958.0 469.4" stroke="#FFB020" stroke-opacity="0.55" stroke-width="3.1" stroke-linecap="round"/>
+  <path d="M939.3 340.7L868.3 356.9" stroke="#FFB020" stroke-opacity="0.55" stroke-width="3.1" stroke-linecap="round"/>
+  <path d="M957.3 262.0L900.3 216.6" stroke="#FFB020" stroke-opacity="0.55" stroke-width="3.1" stroke-linecap="round"/>
+  <circle cx="1030.0" cy="134.0" r="20.2" fill="#101C2E" stroke="#FFB020" stroke-width="4.7"/>
+  <circle cx="1175.4" cy="204.0" r="20.2" fill="#101C2E" stroke="#FFB020" stroke-width="4.7"/>
+  <circle cx="1211.3" cy="361.4" r="20.2" fill="#101C2E" stroke="#FF6B6B" stroke-width="4.7"/>
+  <circle cx="1110.7" cy="487.6" r="20.2" fill="#101C2E" stroke="#FFB020" stroke-width="4.7"/>
+  <circle cx="949.3" cy="487.6" r="20.2" fill="#101C2E" stroke="#FFB020" stroke-width="4.7"/>
+  <circle cx="848.7" cy="361.4" r="20.2" fill="#101C2E" stroke="#FFB020" stroke-width="4.7"/>
+  <circle cx="884.6" cy="204.0" r="20.2" fill="#101C2E" stroke="#FFB020" stroke-width="4.7"/>
+  <circle cx="1030" cy="320" r="83.7" fill="url(#hub)" stroke="#FFD27A" stroke-width="4.7"/>
+  <g transform="translate(930.8 214.6) scale(0.388)"><g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 250V388M204 388H308" stroke="#3B2A00" stroke-width="26"/>
+    <g transform="rotate(-14 256 216)">
+      <path d="M120 216H208M304 216H368" stroke="#0B1524" stroke-width="30"/>
+      <path d="M84 164L164 216L84 268L110 216Z" fill="#0B1524" stroke="#0B1524" stroke-width="14"/>
+      <path d="M362 166L436 216L362 266Z" fill="#0B1524" stroke="#0B1524" stroke-width="14"/>
+      <circle cx="256" cy="216" r="27" stroke="#FFFFFF" stroke-width="22"/>
+    </g>
+  </g></g>
+  </g>
+</svg>

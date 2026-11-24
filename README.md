@@ -1,8 +1,27 @@
-# Faultvane
+<p align="center">
+  <img src="docs/assets/banner.svg" alt="Faultvane: a resilience toolkit for Go. Seven policies that keep a service stable when a dependency fails." width="100%">
+</p>
 
-[![CI](https://github.com/faultvane/faultvane-go/actions/workflows/ci.yml/badge.svg)](https://github.com/faultvane/faultvane-go/actions/workflows/ci.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/faultvane/faultvane-go.svg)](https://pkg.go.dev/github.com/faultvane/faultvane-go)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+<p align="center">
+  <a href="https://github.com/faultvane/faultvane-go/actions/workflows/ci.yml"><img src="https://github.com/faultvane/faultvane-go/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/faultvane/faultvane-go/actions/workflows/mutation.yml"><img src="https://github.com/faultvane/faultvane-go/actions/workflows/mutation.yml/badge.svg" alt="Mutation"></a>
+  <a href="https://github.com/faultvane/faultvane-go/actions/workflows/scenarios.yml"><img src="https://github.com/faultvane/faultvane-go/actions/workflows/scenarios.yml/badge.svg" alt="Scenarios"></a>
+  <a href="https://pkg.go.dev/github.com/faultvane/faultvane-go"><img src="https://pkg.go.dev/badge/github.com/faultvane/faultvane-go.svg" alt="Go Reference"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/github/v/tag/faultvane/faultvane-go?filter=v*&label=release&color=f09a00" alt="Release"></a>
+  <img src="https://img.shields.io/badge/go-1.24%2B-blue" alt="Go 1.24 or later">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License: Apache 2.0"></a>
+</p>
+
+<p align="center">
+  <a href="#policies">Policies</a> ·
+  <a href="#usage">Usage</a> ·
+  <a href="#documentation">Documentation</a> ·
+  <a href="#requirements">Requirements</a> ·
+  <a href="docs/benchmarks.md">Benchmarks</a> ·
+  <a href="docs/roadmap.md">Roadmap</a>
+</p>
+
+# Faultvane
 
 Faultvane is a resilience toolkit for Go services.
 It gives you the policies that keep a service stable when a dependency is slow, fails, or gets too much traffic.
