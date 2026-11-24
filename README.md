@@ -23,11 +23,11 @@ You can use each policy alone, or combine the policies in one pipeline.
 | [**Retry**](docs/retry/README.md) | `retry` | A call fails for a short time. A second attempt can succeed. | No |
 | [**Bulkhead**](docs/bulkhead/README.md) | `bulkhead` | One slow dependency uses all resources of the service. | No |
 | [**Concurrency limiter**](docs/concurrencylimit/README.md) | `concurrencylimit` | Too many calls run at the same time. | No |
-| [**Rate limiter**](docs/ratelimit/README.md) | `ratelimit` | Too many calls start in a time period. | No |
+| [**Rate limiter**](docs/ratelimit/README.md) | `ratelimit` | Too many calls start in a time period. | Optional |
 | [**Load shedding**](docs/loadshed/README.md) | `loadshed` | The service itself is overloaded. | No |
 
 All seven policies are implemented.
-Only the circuit breaker has shared state.
+The circuit breaker has shared state. The rate limiter can share its limit between instances through a store (in-memory or Redis).
 
 ## Principles
 
@@ -128,8 +128,7 @@ defer registration.Unregister()
 pipeline := faultvane.Combine(faultvaneotel.Traced(breaker), attempt)
 ```
 
-The timeout, retry, bulkhead, concurrency limiter, and load shedding policies have statistics (`Stats`) and OpenTelemetry metrics. They write no logs and have no observer.
-The rate limiter has no statistics and no metrics yet.
+The timeout, retry, bulkhead, concurrency limiter, rate limiter, and load shedding policies have statistics (`Stats`) and OpenTelemetry metrics. They write no logs and have no observer.
 
 ## Documentation
 

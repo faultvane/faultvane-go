@@ -97,7 +97,7 @@ The mutation gate is active. The command is `sh scripts/mutation.sh`. The workfl
 
 Limits of the gate:
 
-- The gate does not apply to the conformance suite `circuitbreaker/storetest`, to the store adapters, or to the `otel` module. The score of `circuitbreaker/storetest` is 63.2%.
+- The gate does not apply to the conformance suites `circuitbreaker/storetest` and `ratelimit/storetest`, to the store adapters, or to the `otel` module. The score of `circuitbreaker/storetest` is 63.2%.
 - The tool does not remove statements and does not change constants.
 - Some mutants that survive have no effect on the behavior. The tool cannot find them. They decrease the score.
 
@@ -111,7 +111,7 @@ Result on 2026-11-24:
 | `bulkhead` | 11 | 11 | 100% |
 | `concurrencylimit` | 23 | 23 | 100% |
 | `loadshed` | 15 | 15 | 100% |
-| `ratelimit` | 10 | 9 | 90.0% |
+| `ratelimit` | 48 | 47 | 97.9% |
 
 The 7 mutants that survive in `circuitbreaker` are in `sync.go`: 4 in the condition that decides if a snapshot replaces the local view, and 3 in the delay calculation of the synchronizer loop.
 The mutant that survives in `ratelimit` has no effect on the behavior: a full bucket gives the same result with `>=` and with `>`.
@@ -213,6 +213,8 @@ Property tests check the six invariants of the [state machine](circuit-breaker/s
 The conformance suite in `circuitbreaker/storetest` checks the rules of the [store contract](stores/README.md).
 Each adapter of the repository runs it against a real instance of its store: Redis, Redis with cluster mode on, PostgreSQL, MySQL, and MongoDB.
 
+The conformance suite in `ratelimit/storetest` checks the rules of the [rate limit store](ratelimit/store.md). The in-memory store and the Redis store run it. The Redis store runs it against a real Redis.
+
 The tests of local mode, reconciliation, and data loss are in the core module. They use the in-memory adapter and a fake store for faults.
 
 The tests of each adapter with a real store contain:
@@ -265,7 +267,7 @@ Each requirement and each acceptance test has an identifier, for example `GEN-3`
 
 - The name of an acceptance test contains its identifier, for example `TestAT5_StaleWriterIsRejected`.
 - A test that proves a requirement names the identifier in a subtest name or in the test table.
-- The script `scripts/traceability.sh` runs in continuous integration. It reads `scripts/implemented-requirements.txt`, the list of the requirements that the completed milestones implement. The list has 245 identifiers. It fails when an identifier of the list has no test, or when a test names an identifier that the requirements documents do not define.
+- The script `scripts/traceability.sh` runs in continuous integration. It reads `scripts/implemented-requirements.txt`, the list of the requirements that the completed milestones implement. The list has 267 identifiers. It fails when an identifier of the list has no test, or when a test names an identifier that the requirements documents do not define.
 - A requirement about the documentation or about the process, for example TK-4 or QA-3, has no test in the code. A review checks it.
 
 ## 10. Benchmarks

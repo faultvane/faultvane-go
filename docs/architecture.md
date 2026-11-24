@@ -48,7 +48,7 @@ Only the circuit breaker uses a store and the OpenTelemetry module.
 4. **Shared state is optional.** A policy with a shared store behaves as the same policy without a store when the store is not available.
 5. **The core does not know a store product.** A policy that can share state defines a store interface. Adapters implement it.
 6. **No required dependencies.** The core module uses only the standard library.
-7. **Each goroutine has an owner.** A policy that starts a goroutine has a `Close` method that stops it. Only a circuit breaker with a store starts a goroutine.
+7. **Each goroutine has an owner.** A policy that starts a goroutine has a `Close` method that stops it. Only a circuit breaker with a store and a rate limiter with a store start a goroutine.
 8. **Each failure is visible.** The circuit breaker reports its state changes and its faults through logs, an observer, and counters. The other policies do not have this function yet. Section 7 gives the status.
 
 ## 3. Policies
@@ -60,7 +60,7 @@ Only the circuit breaker uses a store and the OpenTelemetry module.
 | Retry | Run a failed attempt again, within a budget. The option `retry.WithGate` connects the retry to a circuit breaker. | Retry budget | No |
 | Bulkhead | Reject calls above a fixed number of concurrent calls for one dependency. | Number of calls in progress and number of waiting callers | No. The resources that it protects are local. |
 | Concurrency limiter | Adapt the limit of concurrent calls to the results of the calls. | The limit and the number of calls in progress | No |
-| Rate limiter | Reject calls above a rate. | The tokens of one token bucket | No. A shared limit for all instances is not implemented. |
+| Rate limiter | Reject calls above a rate. | The tokens of one token bucket | Optional. With a store, the instances share one token bucket. See the [rate limit store](ratelimit/store.md). |
 | Load shedding | Reject low-priority work when the service is overloaded. | Number of calls in progress | No. The overload is local. |
 
 Each policy has a guide. The [documentation index](README.md) lists the guides.
@@ -131,8 +131,8 @@ The circuit breaker defines the interface `circuitbreaker.Store`.
 The adapter modules for Redis, SQL databases, and MongoDB implement it.
 [Stores](stores/README.md) describes the interface and the contract of an adapter.
 
-The circuit breaker is the only policy with shared state.
-Its [architecture](circuit-breaker/architecture.md) is the reference for a later policy with shared state.
+The circuit breaker and the rate limiter are the policies with shared state.
+The circuit breaker [architecture](circuit-breaker/architecture.md) is the reference for a policy with shared state. The rate limiter has its own store interface. See the [rate limit store](ratelimit/store.md).
 
 ## 6. Module layout
 
@@ -203,8 +203,7 @@ The circuit breaker is the only policy with observability now.
 The attributes have a low and fixed cardinality.
 The circuit breaker [observability](circuit-breaker/observability.md) document gives the names.
 
-The timeout, retry, bulkhead, concurrency limiter, and load shedding policies have statistics (`Stats`) and OpenTelemetry metrics. They write no logs and have no observer.
-The rate limiter has no statistics and no metrics yet.
+The timeout, retry, bulkhead, concurrency limiter, rate limiter, and load shedding policies have statistics (`Stats`) and OpenTelemetry metrics. They write no logs and have no observer.
 The core package defines no observer interface.
 The bulkhead, the concurrency limiter, and the load shedding policy have methods that return their current numbers, for example `InFlight`. The guide of each policy lists them.
 
