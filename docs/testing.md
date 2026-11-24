@@ -182,7 +182,7 @@ Each policy must have tests for these subjects before its release:
 | Concurrency | Many goroutines. No data race. Limits hold exactly under contention. |
 | Lifecycle | `Close` stops all goroutines. Calls after `Close` have a defined result. |
 | Composition | The policy in a pipeline with each other policy that exists. |
-| Observability | Each metric, each log event, and each trace attribute. Only the circuit breaker has these signals now, so only the circuit breaker has these tests. |
+| Observability | Each metric, each log event, and each trace attribute. The circuit breaker has all of these signals. The timeout, retry, bulkhead, concurrency limiter, and load shedding policies have metrics only, and each metric has a test. |
 | Performance | A benchmark of the normal path and an assertion of zero allocations. |
 
 ## 6. Circuit breaker: unit tests
@@ -265,7 +265,7 @@ Each requirement and each acceptance test has an identifier, for example `GEN-3`
 
 - The name of an acceptance test contains its identifier, for example `TestAT5_StaleWriterIsRejected`.
 - A test that proves a requirement names the identifier in a subtest name or in the test table.
-- The script `scripts/traceability.sh` runs in continuous integration. It reads `scripts/implemented-requirements.txt`, the list of the requirements that the completed milestones implement. The list has 235 identifiers. It fails when an identifier of the list has no test, or when a test names an identifier that the requirements documents do not define.
+- The script `scripts/traceability.sh` runs in continuous integration. It reads `scripts/implemented-requirements.txt`, the list of the requirements that the completed milestones implement. The list has 245 identifiers. It fails when an identifier of the list has no test, or when a test names an identifier that the requirements documents do not define.
 - A requirement about the documentation or about the process, for example TK-4 or QA-3, has no test in the code. A review checks it.
 
 ## 10. Benchmarks

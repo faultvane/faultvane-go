@@ -26,7 +26,7 @@
 | Load shedding | `loadshed` | [Guide](loadshed/README.md), [requirements](loadshed/requirements.md) | Implemented |
 
 Each policy has its own directory with a requirements document and a guide or design documents.
-Only the circuit breaker has metrics, logs, and an observer. The other policies do not have them yet.
+The circuit breaker has metrics, logs, and an observer. The timeout, retry, bulkhead, concurrency limiter, and load shedding policies have statistics (`Stats`) and OpenTelemetry metrics. They write no logs and have no observer. The rate limiter has no statistics and no metrics yet.
 
 ## Shared state
 
