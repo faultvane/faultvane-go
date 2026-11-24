@@ -63,6 +63,7 @@ The library does not trade the correctness of the shared state for more availabi
 | DS-6 | The breaker behavior is the same with each adapter. One shared conformance test suite checks each adapter. |
 | DS-7 | The core does not depend on the client library of a store. Each adapter with an external dependency is a separate module. |
 | DS-8 | An application can supply its own adapter. The documentation defines the contract of an adapter. |
+| DS-9 | The shared state contains the configuration fingerprint of the instance that made the last accepted write. A shared state without a fingerprint is valid. |
 
 ### Generation
 
@@ -83,6 +84,7 @@ The library does not trade the correctness of the shared state for more availabi
 | FD-5 | The application changes these values through configuration only. |
 | FD-6 | The circuit opens when the instances together reach the threshold. One instance does not have to reach it alone. |
 | FD-7 | The library does not send each call result to the store as a separate operation. |
+| FD-8 | An instance detects that the last writer of the shared state has a different configuration for the same breaker. The detection changes no permit decision and adds no cost to a call. |
 
 ### Half-open coordination
 
@@ -164,6 +166,7 @@ The library does not trade the correctness of the shared state for more availabi
 | CFG-1 | The library exposes the options that [configuration.md](configuration.md) lists. |
 | CFG-2 | Each option has a safe default. |
 | CFG-3 | An invalid configuration fails when the application creates the breaker. |
+| CFG-4 | The breaker calculates a configuration fingerprint from the values that must be equal in all instances. A value that is local to one instance is not in the fingerprint. |
 
 ### Observability
 
@@ -174,6 +177,7 @@ The library does not trade the correctness of the shared state for more availabi
 | OB-3 | The library logs each state transition, each change of mode, each reconciliation, and each failed store operation. |
 | OB-4 | Logs and traces contain no credentials, request payloads, or tokens. |
 | OB-5 | OpenTelemetry tracing is optional. It adds no significant cost when it is off. |
+| OB-6 | The library reports a configuration difference between instances with an event, a log, a statistic, and a metric. It writes the event and the log only when the difference starts and when it ends. |
 
 ### Security
 

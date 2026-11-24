@@ -64,8 +64,9 @@ The adapter keeps one document for each breaker.
 | `expireAt` | Date | The time after which MongoDB can remove the document. |
 | `now` | Date | The MongoDB server time of the last read step of an operation. The adapter uses it as the store time. |
 
-The record contains the state, the generation, the transition time, the open duration, the number of probe successes, the leases, and the window buckets.
-The JSON field names are the names of the Go fields, for example `State`, `Generation`, `Leases`, and `Buckets`.
+The record contains the state, the generation, the transition time, the open duration, the number of probe successes, the leases, the window buckets, and the configuration fingerprint of the last writer.
+The JSON field names are the names of the Go fields, for example `State`, `Generation`, `Leases`, `Buckets`, and `Fingerprint`.
+A record without the field `Fingerprint` is valid. Its fingerprint is the empty text. A document from before the fingerprint needs no migration.
 A new document has the record `{}` and the version 0. That is `CLOSED` with generation 0.
 The namespace and the name cannot contain the separator `:`, so two breakers cannot get the same `_id`.
 
@@ -74,7 +75,7 @@ The namespace and the name cannot contain the separator `:`, so two breakers can
 `Report`, `AcquireProbe`, `CompleteProbe`, and `Restore` each use an optimistic compare-and-set:
 
 1. **Read step.** `findOneAndUpdate` with an update pipeline and `upsert`. It writes the server time `$$NOW` to the field `now`. It creates the document when the document does not exist. It returns the document.
-2. Apply the event to the record with the method of `circuitbreaker.Record`. This step runs in the instance.
+2. Apply the event to the record with the method of `circuitbreaker.Record`, through `Record.Apply`. This step runs in the instance.
 3. **Write step.** `updateOne` with a filter on `_id` and on the `version` of the read step. It writes the record, the version plus 1, and the new `expireAt`.
 4. When the write step matches no document, a different instance changed the record in the meantime. The adapter starts again at step 1.
 
@@ -104,6 +105,7 @@ The adapter uses no multi-document transaction. It does not need a replica set f
 | C10 Cleanup | The field `expireAt` and a TTL index. See section 6. |
 | C11 Data loss is visible | A document that does not exist gives `CLOSED` with generation 0. |
 | C12 No side effects | The adapter has no goroutine, no lock, and no timer. |
+| C13 Fingerprint | The field `Fingerprint` of the record. The method `Record.Apply` gives the response with the fingerprint from before the operation. An attempt that loses the compare-and-set gives no response. |
 
 The adapter passes the conformance suite with MongoDB.
 

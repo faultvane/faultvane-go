@@ -5,7 +5,8 @@ It works as a local breaker in one process.
 With a shared store, all instances of a service share one circuit.
 
 Status: implemented. The local breaker, the shared state through a store, local mode, reconciliation, and observability exist and have tests.
-Not implemented: the configuration fingerprint and the optional transition notifications. No release tag exists yet.
+The configuration fingerprint reports instances that have different configurations for one breaker.
+Not implemented: the optional transition notifications. No release tag exists yet.
 
 | Document | Content |
 |---|---|

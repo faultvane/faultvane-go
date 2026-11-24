@@ -44,7 +44,8 @@ The system benchmark measured approximately 2 store operations each second for e
 
 - No release exists yet, so no two released versions exist. After version 1.0, the data layout of each adapter is a compatibility commitment.
 - The Redis adapter keeps a schema version in the state hash. The SQL adapter and the MongoDB adapter keep no schema version.
-- During a rolling deployment, instances can have different thresholds. The library does not detect this difference. The condition stops when the deployment ends.
+- During a rolling deployment, instances can have different thresholds. The library reports this difference: the metric `config_mismatch` is `1`, and the instance writes a `WARN` log. The breaker continues to operate. The condition stops when the deployment ends and each group of instances wrote to the store again.
+- A change of the library version that changes the format of the configuration fingerprint also gives this report during the deployment.
 - To change a threshold safely, deploy the new value to all instances. No change in the store is necessary.
 
 ## 4. Shutdown
@@ -64,7 +65,8 @@ A probe lease of a stopped instance ends at its end time.
 | The circuit stays `HALF_OPEN` | Probes get no result, for example the calls hang | Add a timeout policy. Make `ProbeTimeout` longer than the timeout. |
 | Instances are in local mode | The store is not reachable or slow | Examine the metrics `store_errors` and `store.duration`. Examine the network and the store. |
 | Instances show different states | Some instances are in local mode | Examine the `mode` metric of each instance. |
-| The circuit opens at different thresholds | Instances have different configurations. The library does not detect this condition | Make the configuration equal. |
+| The circuit opens at different thresholds | Instances have different configurations | Examine the metric `config_mismatch` and the `WARN` log for a configuration difference. Compare `ConfigFingerprint()` of the instances. Make the configuration equal. |
+| `config_mismatch` changes between `0` and `1` many times | Two groups of instances with different configurations write to the store in turns | Make the configuration equal. |
 
 ## 6. Limits to know
 

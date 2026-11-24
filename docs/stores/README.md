@@ -56,8 +56,10 @@ type Store interface {
 Each operation returns the authoritative state after its work, as a `Snapshot`:
 
 ```text
-Snapshot(state, generation, transitionTime, openDuration, storeTime)
+Snapshot(state, generation, transitionTime, openDuration, storeTime, fingerprint)
 ```
+
+The fingerprint of a snapshot is the configuration fingerprint that the store had before the operation. Rule C13 defines it.
 
 The values that an operation needs, for example the thresholds, the window settings, and the state TTL, are fields of its argument.
 The store keeps no configuration.
@@ -65,7 +67,7 @@ The store keeps no configuration.
 ### The record type
 
 The package `circuitbreaker` exports the type `Record`.
-A `Record` is the full shared data of one breaker: the state, the generation, the transition time, the open duration, the number of probe successes, the leases, and the window buckets.
+A `Record` is the full shared data of one breaker: the state, the generation, the transition time, the open duration, the number of probe successes, the leases, the window buckets, and the configuration fingerprint of the last writer.
 It is a pure value. Its methods make no I/O and read no clock.
 
 | Method | Store operation |
@@ -74,10 +76,11 @@ It is a pure value. Its methods make no I/O and read no clock.
 | `AcquireProbe(now, request) (Record, bool)` | `AcquireProbe` |
 | `CompleteProbe(now, result) Record` | `CompleteProbe` |
 | `Restore(snapshot) Record` | `Restore` |
-| `Snapshot(now) Snapshot` | The response of each operation |
+| `Snapshot(now) Snapshot` | The response of `Load` |
+| `Apply(now, change) (Record, Snapshot)` | The new record and the response of each operation that writes. The response has the fingerprint of the record before the change. |
 
 An adapter written in Go can use `Record` for all transition logic.
-The adapter then does only three things: read the record and the store time atomically, call the method, and write the result.
+The adapter then does only three things: read the record and the store time atomically, call the method through `Apply`, and write the result.
 The in-memory, SQL, and MongoDB adapters work in this way. They share one implementation of the transitions.
 The Redis adapter cannot run Go code in the store. Its Lua scripts are a second implementation.
 [ADR 0007](../adr/0007-shared-record-for-go-adapters.md) records this decision.
@@ -108,6 +111,18 @@ An adapter must satisfy these rules.
 | C10 | **Cleanup.** The data of a breaker that is not used does not stay forever. Cleanup never removes the state of a breaker in use. |
 | C11 | **Data loss is visible.** After a loss of data, `Load` returns a lower generation or the initial state. The adapter does not hide the loss. |
 | C12 | **No side effects on the request path.** The adapter starts no goroutine for each call and holds no lock across a network call. |
+| C13 | **Fingerprint.** The data of a breaker contains one configuration fingerprint. `Report`, `AcquireProbe`, and `CompleteProbe` save the fingerprint of their argument when the store accepts the operation. An operation that the store ignores and `Restore` do not change the fingerprint. A transition keeps it. Each response contains the fingerprint that the store had before the operation. Data without a fingerprint gives the empty text. |
+
+For rule C13, the store accepts an operation in these conditions:
+
+| Operation | Condition |
+|---|---|
+| `Report` | The state is `CLOSED` and the generation of the report is equal to the stored generation. |
+| `AcquireProbe` | The state after the operation is `HALF_OPEN`. The store saves the fingerprint also when it grants no lease. |
+| `CompleteProbe` | The state is `HALF_OPEN` and the generation of the result is equal to the stored generation. The store saves the fingerprint also when the token has no valid lease. |
+
+The fingerprint is text without a meaning for the store. The store does not compare fingerprints.
+[Failure detection](../circuit-breaker/failure-detection.md) describes how the breaker uses the fingerprint.
 
 A breaker with no stored state is `CLOSED` with generation 0.
 
@@ -161,9 +176,9 @@ func TestConformance(t *testing.T) {
 
 The suite contains:
 
-- Checks for the transitions, the generation rules, the window, the leases, restore, the isolation of breakers, the store time, and an ended context. The name of each check starts with the contract rule that it proves, for example `C6`.
+- Checks for the transitions, the generation rules, the window, the leases, restore, the fingerprint, the isolation of breakers, the store time, and an ended context. The name of each check starts with the contract rule that it proves, for example `C6`.
 - Concurrency checks for C1, C4, and C6: concurrent probe requests get exactly the limit, and concurrent reports open the circuit one time.
-- Random sequences of operations. The suite runs each sequence on the adapter and on the in-memory store. The states, the generations, and the probe grants must be equal.
+- Random sequences of operations. The suite runs each sequence on the adapter and on the in-memory store. The states, the generations, the probe grants, and the fingerprints of the responses must be equal.
 
 The suite cannot control the clock of a real store. It uses short durations and waits for a condition with a time limit.
 
