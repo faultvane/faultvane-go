@@ -11,28 +11,37 @@ A user of the library must be able to trust two statements:
 
 ## 1. Quality gates
 
-Continuous integration rejects a change that does not pass all gates.
+This table gives each gate and its real status.
 
-| Gate | Rule | Runs |
-|---|---|---|
-| Format | `gofmt` reports no file. | Each change |
-| Static analysis | `go vet` and the linter report nothing. | Each change |
-| Unit tests | All tests pass with the race detector. | Each change |
-| **Coverage** | **Statement coverage is 98% or more for each module, and 95% or more for each package.** | Each change |
-| Conformance | Each store adapter passes the conformance suite against a real store. | Each change |
-| Integration | The integration tests and the acceptance tests pass with each adapter. | Each change |
-| Goroutine leaks | No test leaves a goroutine. | Each change |
-| Chaos | The fault tests pass. | Each day and before a release |
-| Fuzzing | The fuzz targets run for a fixed time and find nothing. | Each day and before a release |
-| Mutation | The mutation score of the critical packages is 90% or more. | Each week and before a release |
-| Benchmarks | No benchmark is worse than its baseline by more than the permitted margin. | Before a release |
+| Gate | Rule | Runs | Status |
+|---|---|---|---|
+| Format | `gofmt` reports no file. | Each change | Active |
+| Static analysis | `go vet` and `golangci-lint` report nothing. | Each change | Active |
+| Unit tests | All tests of the core module pass with the race detector. | Each change, with Go 1.24 and with the current stable Go | Active |
+| **Coverage** | **Statement coverage is 98% or more for each module, and 95% or more for each package.** | Each change | Active for the core module, the three adapter modules, and the `otel` module |
+| Requirement traceability | Each implemented requirement has a test that names it. | Each change | Active |
+| Goroutine leaks | The tests of each policy compare the number of goroutines before and after. | Each change | Active, as a part of the unit tests |
+| Conformance | Each store adapter passes the conformance suite against a real store. | Each change | Active |
+| Integration | The tests of each adapter with many instances pass against a real store. | Each change | Active |
+| Examples | The two example programs build, and the tests of their output pass. | Each change | Active |
+| Fuzzing | Each fuzz target runs for 3 minutes and finds nothing. | Each day | Active, as a scheduled workflow |
+| System benchmark | Acceptance test AT-7 passes with the Redis adapter. | Each week | Active, as a scheduled workflow |
+| Chaos | The fault tests pass. | Each change | Active only as tests of the Redis adapter with a TCP proxy. No separate scheduled gate exists. See section 8. |
+| Mutation | The mutation score of the critical packages is 90% or more. | Not automated | **Not active.** The maintainers run mutations by hand. See section 2. |
+| Benchmark comparison | No benchmark is worse than its baseline by more than the permitted margin. | Not automated | **Not active.** No workflow compares a benchmark with its baseline. A person compares the results with [benchmarks](benchmarks.md). |
 
-No gate has a manual override.
+No active gate has a manual override.
 A change that cannot pass a gate changes the code or the test, not the gate.
 
-Active now: format, static analysis, unit tests, coverage, goroutine leaks, requirement traceability, and fuzzing.
-Not active yet: the mutation gate. Section 2 gives the reason.
-Each other gate becomes active in the milestone that adds its tests. The [roadmap](roadmap.md) names the milestone.
+### Workflows
+
+| Workflow | File | Jobs |
+|---|---|---|
+| CI | `.github/workflows/ci.yml` | `test`: format, build, `go vet`, coverage, and traceability for the core module. `lint`: `golangci-lint`. `stores`: the adapter modules against real stores, the `otel` module, and the examples. |
+| Fuzz | `.github/workflows/fuzz.yml` | Eight fuzz targets, each day, 3 minutes for each target. |
+| System benchmark | `.github/workflows/system.yml` | Acceptance test AT-7 with Redis, each week. |
+
+No release exists yet. For this reason, no gate ran "before a release".
 
 ## 2. Coverage rule
 
@@ -44,7 +53,7 @@ Each other gate becomes active in the milestone that adds its tests. The [roadma
 | Each package | 95% |
 
 The script `scripts/coverage.sh` measures and enforces both numbers.
-Continuous integration runs it for each module.
+Continuous integration runs it for the core module, for each adapter module, and for the `otel` module.
 
 ### How coverage is measured
 
@@ -54,7 +63,7 @@ Continuous integration runs it for each module.
 
 ### What does not count against coverage
 
-- The `examples` module. Its programs are built and run in continuous integration, but they are not measured.
+- The `examples` module. Continuous integration builds its programs and runs the tests of their output, but it does not measure their coverage.
 
 No other exclusion exists.
 The project has no list of ignored files and no "ignore coverage" markers.
@@ -77,39 +86,52 @@ Three other gates find it:
 
 ### Status of the mutation gate
 
-The mutation gate needs an external tool in continuous integration. The tool is not selected and not tested yet.
-Until then, the maintainers run mutations by hand before the end of a milestone and record the result in the roadmap.
+The automated mutation gate is not active.
+It needs an external tool in continuous integration. The tool is not selected and not tested.
+The maintainers run mutations by hand and record the result in the [roadmap](roadmap.md).
+Requirement QA-9 is satisfied for the property tests. For the mutation score, it is satisfied only by these manual runs.
 
 ### Scripts in a store
 
 Go coverage cannot measure code that runs in a store, for example a Lua script in Redis.
-For such code, the adapter keeps a list of the branches of each script.
-The conformance suite must contain a test for each branch.
-A review of a script change checks the list.
+The conformance suite and the tests of the Redis adapter run each script against a real Redis.
+The suite also compares the scripts with the in-memory store for random sequences of operations.
+The repository has no written list of the branches of each script. A review of a script change must check that a test runs each branch.
 
 ## 3. Test levels
 
 | Level | Subject | Tools | Needs a real store |
 |---|---|---|---|
 | Unit | Each package: logic, configuration validation, error values | `testing`, fake clock | No |
-| Property | Invariants with random event sequences | Property-based testing | No |
-| Fuzz | Inputs from outside: store responses, configuration values | `go test -fuzz` | No |
-| Concurrency | Request path with many goroutines, races between results and state changes | `-race`, goroutine leak detector | No |
-| Conformance | Each store adapter against the store contract | `store/storetest`, real store in a container | Yes, except in-memory |
-| Integration | Many instances in one process against one store | In-memory adapter, Testcontainers | Both |
-| Acceptance | The acceptance tests of the requirements documents | Real store in a container | Yes |
-| Chaos | Faults of the store and of the dependency | Network fault proxy, container control | Yes |
-| Benchmark | Cost of the request path and load on the store | `testing.B` | Both |
-| Example | The examples in the documentation compile and give the documented output | Go example tests | No |
+| Property | Invariants with random event sequences | `math/rand/v2` with fixed seeds | No |
+| Fuzz | The state machine, names, and configuration values | `go test -fuzz` | No |
+| Concurrency | Request path with many goroutines, races between results and state changes | `-race`, a count of the goroutines | No |
+| Conformance | Each store adapter against the store contract | `circuitbreaker/storetest`, real store in a container | Yes, except in-memory |
+| Integration | Many instances in one process against one store | In-memory adapter, and real stores from `docker-compose.test.yml` | Both |
+| Acceptance | The acceptance tests of the requirements documents | In-memory adapter, and real stores | Both |
+| Chaos | Faults of the store and of the dependency | A fake store in the core module. A TCP proxy in the tests of the Redis adapter. | Both |
+| Benchmark | Cost of the request path and load on the store | `testing.B`, and the system test of the Redis adapter | Both |
+| Example | The example programs give the expected output | Normal tests in the `examples` module | The `shared` example needs Redis |
 
-Tests that need libraries outside the standard library are in a separate `tests` module.
-The core module keeps a `go.mod` with no dependencies.
+The repository has no separate `tests` module.
+The tests of the core module use only the standard library, so the core module keeps a `go.mod` with no dependencies.
+The tests that need a client library are in the module of the adapter or in the `otel` module.
+
+### Examples
+
+The project forbids comments in code.
+A Go example test needs an `// Output:` comment to run. For this reason, the project does not use Go example tests that run.
+
+- The packages `bulkhead` and `concurrencylimit` have example functions without an output comment. The compiler checks them, but `go test` does not run them.
+- The programs `examples/pipeline` and `examples/shared` each have a normal test. The test runs the program and compares its output with the expected text.
+
+Requirement QA-13 is satisfied only by these two programs. The code blocks in the documents are not compiled by a test.
 
 ## 4. Rules for tests
 
 - Write the test first, where it fits. Then write the code. Then refactor.
 - Unit tests use a fake clock. They do not sleep.
-- Integration tests use short durations and wait for a condition with a deadline. They do not assert on a fixed sleep time.
+- Integration tests use short durations and wait for a condition with a deadline. They do not assert on a fixed sleep time. One test of the Redis adapter asserts that 1000 calls with a slow store complete in less than 100 ms.
 - A test that fails sometimes is a defect. Continuous integration does not run a failed test again.
 - Each test creates its own namespace. Tests can run in parallel on one store.
 - Tests assert on observable behavior: the result of a call, the state, the number of calls that reach the dependency, and the state that the store returns.
@@ -133,7 +155,7 @@ Each policy must have tests for these subjects before its release:
 | Concurrency | Many goroutines. No data race. Limits hold exactly under contention. |
 | Lifecycle | `Close` stops all goroutines. Calls after `Close` have a defined result. |
 | Composition | The policy in a pipeline with each other policy that exists. |
-| Observability | Each metric, each log event, and each trace attribute. |
+| Observability | Each metric, each log event, and each trace attribute. Only the circuit breaker has these signals now, so only the circuit breaker has these tests. |
 | Performance | A benchmark of the normal path and an assertion of zero allocations. |
 
 ## 6. Circuit breaker: unit tests
@@ -161,29 +183,42 @@ Property tests check the six invariants of the [state machine](circuit-breaker/s
 | Many instances reconcile at the same time with different local states. | All instances end with the same state and generation. |
 | Many goroutines call `Execute` while the snapshot changes. | No data race. Each call gets a result that is valid for one snapshot. |
 
-The conformance suite in `store/storetest` checks each rule of the [store contract](stores/README.md).
-Each adapter of the repository runs it against a real instance of its store.
+The conformance suite in `circuitbreaker/storetest` checks the rules of the [store contract](stores/README.md).
+Each adapter of the repository runs it against a real instance of its store: Redis, Redis with cluster mode on, PostgreSQL, MySQL, and MongoDB.
 
-The integration tests run with each adapter:
+The tests of local mode, reconciliation, and data loss are in the core module. They use the in-memory adapter and a fake store for faults.
 
-- The state stays in the store and a new instance reads it.
-- Many instances share the state.
-- The store stops and starts again, with and without data loss.
-- Reconciliation for each row of the table in [degraded mode](circuit-breaker/degraded-mode.md).
-- Cleanup: a state in use stays, and an unused state is removed.
-- For the Redis adapter, Redis Cluster: all keys of one breaker are in one slot.
+The tests of each adapter with a real store contain:
+
+- Many instances share the state (AT-1) and the probe (AT-2).
+- An instance restores the state after the store lost it.
+- The data layout and the cleanup of the adapter.
+- Each operation returns `faultvane.ErrStoreUnavailable` when the store does not answer.
+
+Only the tests of the Redis adapter also contain:
+
+- The connection stops and starts again, with reconciliation (AT-3, AT-4, AT-6).
+- A slow store delays no call.
+- One Redis server with cluster mode on: all keys of one breaker are in one slot.
+
+[Stores](stores/README.md) has a table of the acceptance tests for each adapter.
 
 ## 8. Circuit breaker: chaos tests
 
-| Fault | Method | Assertions |
-|---|---|---|
-| Store unavailable | Stop the container | Requests continue. Local mode starts. No call waits longer than the store timeout. |
-| Store slow | Add latency in the proxy | The same as store unavailable. The latency of `CLOSED` calls does not change. |
-| Store restart | Restart the container without persistence | `Restore` gives the highest authoritative generation. |
-| Store partition | Cut the connection of a part of the instances | The two groups work. After the partition, all instances converge. |
-| Dependency unavailable | The fake dependency fails | The circuit opens for all instances. The traffic stops. |
-| Dependency recovery | The fake dependency succeeds again | One probe. The circuit closes for all instances. |
-| Application restart | Create a new instance during `OPEN` | The new instance reads `OPEN`. It sends no call. |
+The chaos tests are normal tests. They run with each change.
+No separate scheduled chaos gate exists, and no test stops or restarts a container.
+
+| Fault | Method | Where | Assertions |
+|---|---|---|---|
+| Store unavailable | A fake store returns errors. A TCP proxy stops the connection to Redis. | Core module, Redis adapter | Requests continue. Local mode starts. After the connection is back, the instance reconciles. |
+| Store slow | The TCP proxy adds a delay of 100 ms. | Redis adapter | Local mode starts. 1000 calls complete in less than 100 ms. |
+| Store data loss | The test deletes the data of the breaker in the store. | Core module, each adapter | `Restore` writes the last authoritative snapshot again. The highest generation wins. |
+| Store partition | The TCP proxy stops the connection of a part of the instances. | Redis adapter | The instances get different local states. After the partition, all instances converge to the state of the store. |
+| Dependency unavailable | The fake dependency fails. | Core module, each adapter | The circuit opens for all instances. |
+| Dependency recovery | The fake dependency succeeds again. | Core module, each adapter | One probe. The circuit closes for all instances. |
+| Application restart | The test creates a new instance during `OPEN`. | Core module | The new instance reads `OPEN`. |
+
+Not tested: a restart of a real store container, a failover of Redis Sentinel or of a database, and a cluster with many nodes.
 
 ## 9. Requirement traceability
 
@@ -191,7 +226,7 @@ Each requirement and each acceptance test has an identifier, for example `GEN-3`
 
 - The name of an acceptance test contains its identifier, for example `TestAT5_StaleWriterIsRejected`.
 - A test that proves a requirement names the identifier in a subtest name or in the test table.
-- The script `scripts/traceability.sh` runs in continuous integration. It reads `scripts/implemented-requirements.txt`, the list of the requirements that the completed milestones implement. It fails when an identifier of the list has no test, or when a test names an identifier that the requirements documents do not define.
+- The script `scripts/traceability.sh` runs in continuous integration. It reads `scripts/implemented-requirements.txt`, the list of the requirements that the completed milestones implement. The list has 234 identifiers. It fails when an identifier of the list has no test, or when a test names an identifier that the requirements documents do not define.
 - A requirement about the documentation or about the process, for example TK-4 or QA-3, has no test in the code. A review checks it.
 
 ## 10. Benchmarks
@@ -211,18 +246,28 @@ A test asserts zero allocations with `testing.AllocsPerRun`, so this property is
 
 ### System
 
-The benchmark runs 1, 10, 50, and 100 instances in one process against one store.
-It runs with the store healthy, unavailable, and recovering.
-It runs for each adapter that shares state between instances.
+The system benchmark is acceptance test AT-7. It is the test `TestSystem` in the module `store/redis`.
+It runs 1, 10, 50, and 100 instances in one process against one Redis.
+It runs with the store healthy, unavailable, and recovering, and with a low and a high request rate.
 It records:
 
-- The latency that the policy adds to a call, at percentiles 50, 99, and 99.9.
-- The number of store operations each second, for different request rates.
-- The memory for each policy instance and the number of goroutines.
+- The latency that the breaker adds to a call, at percentiles 50, 99, and 99.9.
+- The number of store operations each second.
+- The number of synchronizer goroutines during the run and after `Close`.
 
-The run passes when the store operation rate does not change with the request rate, and when memory and goroutines stay constant during the run.
+The run fails in each of these conditions:
+
+- Percentile 99 of the added latency is above 1 ms.
+- The store operation rate is above 3 operations each second for each instance.
+- The high request rate makes less than 10 times the calls of the low request rate.
+- The number of synchronizer goroutines is not equal to the number of instances during the run, or is not 0 after `Close`.
+[Benchmarks](benchmarks.md) records the results and gives the command.
+
+The system benchmark runs only with the Redis adapter. It does not measure memory, and it runs for 1.5 seconds for each row. The project has no long run for memory.
 
 ## 11. Run the tests
+
+The core module needs only Go:
 
 ```sh
 go build ./...
@@ -230,5 +275,24 @@ go vet ./...
 sh scripts/coverage.sh
 sh scripts/traceability.sh
 ```
+
+The adapter modules need Docker:
+
+```sh
+sh scripts/test-stores.sh
+```
+
+`scripts/test-stores.sh` starts Redis, a Redis with cluster mode on, PostgreSQL, MySQL, and MongoDB from `docker-compose.test.yml`.
+It runs `scripts/coverage.sh` in each adapter module and then removes the containers.
+The variable `KEEP_STORES=1` keeps the containers. The variable `STORE_MODULES` selects the modules, for example `STORE_MODULES=store/sql`.
+
+The `otel` module and the `examples` module have their own commands:
+
+```sh
+(cd otel && sh ../scripts/coverage.sh)
+(cd examples && go vet ./... && go test -count=1 ./...)
+```
+
+The test of `examples/shared` needs the Redis of `docker-compose.test.yml`.
 
 `scripts/coverage.sh` runs all tests of the module with the race detector, prints the coverage of each package, and fails below the minimum.
