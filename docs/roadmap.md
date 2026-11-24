@@ -52,8 +52,8 @@ Exit criteria:
 
 - [x] The documents exist and agree with each other.
 - [ ] The owner approved the open decisions in section 5.
-- [ ] The repository has a license.
-- [ ] Continuous integration runs build, `go vet`, static analysis, and tests on each change.
+- [x] The repository has a license.
+- [x] Continuous integration runs build, `go vet`, static analysis, and tests on each change.
 
 ### M1: Local breaker
 
@@ -232,7 +232,6 @@ The owner of the project must confirm these decisions before M1 starts.
 | Topic | Proposal | Effect of a change |
 |---|---|---|
 | Module path | `github.com/faultvane/faultvane-go` | Cheap before the first release. Expensive after it. |
-| License | Not selected | Necessary before publication. |
 | Minimum Go version | 1.24 | Sets the language features that the code can use. |
 | Redis client | `github.com/redis/go-redis/v9` | Sets the dependency of the store module. |
 | Default start policy | `StartWithProbe` | See [ADR 0004](adr/0004-local-breaker-fallback.md). |
