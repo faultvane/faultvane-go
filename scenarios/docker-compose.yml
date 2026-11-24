@@ -1,0 +1,36 @@
+name: faultvane-scenarios
+
+services:
+  dependency:
+    build:
+      context: .
+      args:
+        BINARY: dependency
+    ports:
+      - "8080"
+  pod:
+    build:
+      context: .
+      args:
+        BINARY: pod
+    ports:
+      - "8080"
+    depends_on:
+      - dependency
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: faultvane
+      POSTGRES_DB: faultvane
+    command: ["postgres", "-c", "max_connections=200"]
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: faultvane
+      MYSQL_DATABASE: faultvane
+    command: ["--max-connections=300"]
+  mongodb:
+    image: mongo:7

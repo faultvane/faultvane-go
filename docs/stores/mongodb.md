@@ -130,6 +130,7 @@ The TTL monitor runs in the background at an interval. A document can stay for s
 The adapter has no cleanup of its own.
 
 Call `EnsureIndexes` one time when the application starts, or create the same index with your deployment tools.
+Do this before the application gets traffic. The call also creates the collection. Without it, the first write creates the collection, and that write can be slower than the store timeout. The breaker does not send a failed report again.
 
 ## 7. Measured latency
 

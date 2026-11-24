@@ -10,6 +10,7 @@
 | [Testing](testing.md) | The test levels, the coverage rule, and the quality gates. |
 | [Roadmap](roadmap.md) | The milestones, their results, and the open items. |
 | [Benchmarks](benchmarks.md) | Measured results with the machine and the Go version. |
+| [Scenarios in Docker](scenarios.md) | Tests with 10 pods, a controllable dependency, and four real stores. |
 | [Decision records](adr/README.md) | The important design decisions, the alternatives, and the consequences. |
 
 ## Policies

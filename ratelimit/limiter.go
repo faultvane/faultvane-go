@@ -30,7 +30,7 @@ func New(opts ...Option) (*Limiter, error) {
 }
 
 func (l *Limiter) available(now time.Time) float64 {
-	available := l.tokens + float64(now.Sub(l.since))*l.rate/float64(time.Second)
+	available := l.tokens + float64(max(now.Sub(l.since), 0))*l.rate/float64(time.Second)
 	if available >= l.burst {
 		l.since, l.tokens = now, l.burst
 		return l.burst

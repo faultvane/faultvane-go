@@ -220,7 +220,19 @@ No separate scheduled chaos gate exists, and no test stops or restarts a contain
 
 Not tested: a restart of a real store container, a failover of Redis Sentinel or of a database, and a cluster with many nodes.
 
-## 9. Requirement traceability
+## 9. Scenarios in Docker
+
+The scenarios run 10 pod containers, a controllable dependency, and four real stores.
+They test each policy with separate processes and a real network, and they stop and start store containers.
+[Scenarios in Docker](scenarios.md) lists each scenario and its expected result.
+
+```sh
+sh scripts/scenarios.sh
+```
+
+The workflow `scenarios.yml` runs them each day.
+
+## 9a. Requirement traceability
 
 Each requirement and each acceptance test has an identifier, for example `GEN-3` or `AT-5`.
 

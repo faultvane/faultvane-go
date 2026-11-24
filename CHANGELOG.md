@@ -10,6 +10,9 @@ No release exists yet. This section lists what the repository contains.
 
 ### Added
 
+- Scenario tests in Docker: 10 pods, a controllable dependency, and Redis, PostgreSQL, MySQL, and MongoDB.
+- Correction: the rate limiter does not reject a call when a goroutine uses a clock value from before the last refill.
+- Correction: a new row of the SQL adapter has an expiry time, so a cleanup does not remove it.
 Core module `github.com/faultvane/faultvane-go`:
 
 - Root package: `ErrRejected`, `ErrInvalidConfig`, `ErrStoreUnavailable`, `Clock`, `SystemClock`, `Policy`, `Combine`, and `Execute`.

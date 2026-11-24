@@ -1,0 +1,26 @@
+name: Scenarios
+
+on:
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scenarios:
+    name: Ten pods in Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: Run the scenarios
+        run: sh scripts/scenarios.sh
+      - name: Show the container logs
+        if: failure()
+        working-directory: scenarios
+        run: docker compose logs --tail 200
