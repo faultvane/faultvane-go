@@ -9,7 +9,7 @@ trap '$compose down -v' EXIT
 
 $compose exec -T redis-cluster redis-cli cluster addslotsrange 0 16383 >/dev/null 2>&1 || true
 
-for module in ${STORE_MODULES:-store/redis store/sql}; do
+for module in ${STORE_MODULES:-store/redis store/sql store/mongodb}; do
   echo "== $module"
   (cd "$root/$module" && sh "$root/scripts/coverage.sh")
 done
