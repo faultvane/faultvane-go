@@ -140,8 +140,9 @@ func TestBucket(t *testing.T) {
 
 	t.Run("RL-9 Allow uses one token and reports the decision", func(t *testing.T) {
 		limiter, _ := newTestLimiter(t, WithBurst(2))
-		if !limiter.Allow() || !limiter.Allow() || limiter.Allow() {
-			t.Fatal("Allow() does not permit exactly 2 calls")
+		first, second, third := limiter.Allow(), limiter.Allow(), limiter.Allow()
+		if !first || !second || third {
+			t.Fatalf("Allow() = %v, %v, %v, want true, true, false", first, second, third)
 		}
 	})
 
