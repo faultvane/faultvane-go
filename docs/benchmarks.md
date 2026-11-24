@@ -267,6 +267,9 @@ What the results show:
 - The run does not use a real store, and it does not measure the memory of the process as the operating system counts it.
 
 The workflow `long-run.yml` runs the same test each week on a GitHub runner.
+Its first run on 2026-11-24 passed: 3 013 million successes, the heap between 205 kB and 214 kB, and 8 goroutines in each sample during the load.
+
+Limit of the test: the circuit opened only 24 times in the local run and 4 times on the runner. At this call rate, the failures of an outage of 2 seconds are usually a small part of the calls of the window. The run gives little evidence for many transitions.
 
 ## What is not measured
 
