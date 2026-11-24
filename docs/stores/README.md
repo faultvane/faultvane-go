@@ -177,15 +177,15 @@ The acceptance tests of the [requirements](../circuit-breaker/requirements.md) r
 |---|---|---|---|---|
 | AT-1 Shared failure detection | Yes | Yes | Yes | Yes |
 | AT-2 One probe for all instances | Yes | Yes | Yes | Yes |
-| AT-3 Operation without the store | Yes | Yes | No | No |
-| AT-4 Reconciliation | Yes | Yes | No | No |
-| AT-5 Stale write | Yes | No | No | No |
-| AT-6 No split-brain condition | Yes | Yes | No | No |
+| AT-3 Operation without the store | Yes | Yes | Yes | Yes |
+| AT-4 Reconciliation | Yes | Yes | Yes | Yes |
+| AT-5 Stale write | Yes | No | Yes | Yes |
+| AT-6 No split-brain condition | Yes | Yes | Yes | Yes |
 | AT-7 System benchmark | No | Yes | No | No |
 | Restore after data loss (RF-5) | Yes | Yes | Yes | Yes |
 
-The core owns local mode and reconciliation, so AT-3, AT-4, and AT-6 do not depend on the adapter.
-For AT-5, the conformance suite has a check with each adapter: a report with a different generation adds nothing.
+The core owns local mode and reconciliation, so AT-3, AT-4, and AT-6 do not depend on the adapter. The tests with the SQL adapter and the MongoDB adapter stop the connections of an instance. They do not stop the store.
+For AT-5, the conformance suite has a check with each adapter: a report with a different generation adds nothing. The Redis adapter has no separate AT-5 test.
 
 ## 6. Write your own adapter
 

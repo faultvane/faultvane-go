@@ -172,7 +172,7 @@ Result:
 - [x] The tests `TestLocalMode`, `TestLocalModeLimit`, `TestStartWithoutStore`, `TestReconciliation`, and `TestDataLoss` cover local mode, reconciliation, and data loss. This document does not verify that a test exists for each row of the tables in [degraded mode](circuit-breaker/degraded-mode.md).
 - [x] A test of the Redis adapter shows that a slow store delays no call.
 - [x] No code of this milestone is in an adapter. The core owns it.
-- [ ] Not done: AT-3, AT-4, and AT-6 with the SQL adapter and the MongoDB adapter.
+- [x] AT-3, AT-4, and AT-6 pass with the SQL adapter and the MongoDB adapter.
 
 Differences from the plan:
 
@@ -256,7 +256,7 @@ Result:
 
 - [x] The adapter passes the conformance suite with PostgreSQL and with MySQL.
 - [x] AT-1, AT-2, and the test for data loss pass with the adapter.
-- [ ] Not done: AT-3 to AT-6 with the adapter. The core tests cover them with the in-memory adapter.
+- [x] AT-3 to AT-6 pass with the adapter against a real store.
 - [x] The [SQL adapter](stores/sql.md) document gives the measured latency of `Load` and `Report`.
 - [ ] Not done: a measurement of the lowest practical sync interval.
 
@@ -272,7 +272,7 @@ Result:
 - [x] The adapter passes the conformance suite with a real MongoDB 7 server.
 - [ ] Not done: a test with a replica set, and a test with the minimum version 4.4.
 - [x] AT-1, AT-2, and the test for data loss pass with the adapter.
-- [ ] Not done: AT-3 to AT-6 with the adapter. The core tests cover them with the in-memory adapter.
+- [x] AT-3 to AT-6 pass with the adapter against a real store.
 - [x] The [MongoDB adapter](stores/mongodb.md) document gives the minimum MongoDB version and the measured latency of `Load` and `Report`.
 - [ ] Not done: a measurement of the lowest practical sync interval.
 
@@ -328,7 +328,8 @@ Result:
 | Shared rate limit | Only the in-memory store and the Redis store exist. No test uses a Redis Cluster. The Docker scenarios do not include the shared rate limit. The instances do not get equal parts of the limit under overload. |
 | Examples in the documents | Requirement QA-13 is satisfied by the three example programs. No test compiles each code block of the documents. |
 | Documentation comments | The exported names have no documentation comments, because the project forbids comments in code. The package pages of the Go documentation site then show only the signatures. |
-| Tests of the adapters | AT-3 to AT-6 and the system benchmark do not run with the SQL adapter and the MongoDB adapter. No test uses a Redis Cluster with many nodes, Redis Sentinel, or a MongoDB replica set. |
+| Tests of the adapters | The system benchmark does not run with the SQL adapter and the MongoDB adapter. The Redis adapter has no separate AT-5 test. No test restarts a real store. No test uses a Redis Cluster with many nodes, Redis Sentinel, or a MongoDB replica set. |
+| Counts of a failed report | The breaker does not send a failed report again (FD-7). When the report after an outage fails, the local failure counts are lost and the instance adopts the state of the store. The fleet converges, but the state after the outage depends on the delivery of that report. The Redis test of AT-6 asserts `OPEN` after the outage and can fail for this reason. No failure of it is recorded. |
 | Long run | No run of one hour for memory exists. |
 
 ## 6. Definition of done for the distributed circuit breaker
