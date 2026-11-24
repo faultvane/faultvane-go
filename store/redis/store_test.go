@@ -87,7 +87,7 @@ func report(generation uint64, failures int64, ttl time.Duration) circuitbreaker
 }
 
 func TestConformance(t *testing.T) {
-	t.Run("QA-8 DS-6 standalone Redis", func(t *testing.T) {
+	t.Run("QA-8 DS-6 GEN-2 standalone Redis", func(t *testing.T) {
 		client := reachable(t, standalone())
 		storetest.Run(t, func(t *testing.T) circuitbreaker.Store { return newStore(t, client) })
 	})

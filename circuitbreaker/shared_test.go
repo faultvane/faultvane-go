@@ -220,7 +220,7 @@ func (f *fleet) connect(indexes ...int) {
 }
 
 func TestSharedState(t *testing.T) {
-	t.Run("DS-1 DS-3 RC-6 a new instance starts from the state in the store", func(t *testing.T) {
+	t.Run("DS-1 DS-3 DS-8 TK-31 RC-6 a new instance starts from the state in a store that the application supplies", func(t *testing.T) {
 		f := newFleet(t, 1)
 		f.openAll()
 		late := f.add()

@@ -2,8 +2,8 @@
 set -eu
 
 implemented="scripts/implemented-requirements.txt"
-documents="docs/requirements.md docs/circuit-breaker/requirements.md"
-pattern='(TK|SM|DS|GEN|FD|HO|DG|RC|RF|KEY|TTL|PI|API|ERR|CFG|OB|SEC|PF|AT|QA)-[0-9]+'
+documents=$(ls docs/requirements.md docs/*/requirements.md)
+pattern='(TK|SM|DS|GEN|FD|HO|DG|RC|RF|KEY|TTL|PI|API|ERR|CFG|OB|SEC|PF|AT|QA|TO|RT|BH|CL|RL|LS)-[0-9]+'
 failed=0
 
 defined=$(grep -ohE "^\| $pattern \|" $documents | grep -oE "$pattern" | sort -u)
