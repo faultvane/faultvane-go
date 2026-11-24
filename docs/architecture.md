@@ -21,7 +21,7 @@ flowchart TB
         end
         CORE[Core: errors, clock, policy interface, observer]
         subgraph Integrations
-            ST[Store adapters: in-memory, Redis, SQL]
+            ST[Store adapters: in-memory, Redis, SQL, MongoDB]
             OT[OpenTelemetry]
         end
     end
@@ -154,7 +154,9 @@ faultvane-go/
 │   ├── redis/               separate module, depends on the Redis client
 │   │   ├── go.mod
 │   │   └── scripts/         Lua scripts, embedded in the binary
-│   └── sql/                 separate module, uses database/sql
+│   ├── sql/                 separate module, uses database/sql
+│   │   └── go.mod
+│   └── mongodb/             separate module, depends on the MongoDB driver
 │       └── go.mod
 ├── otel/                    separate module, OpenTelemetry metrics and traces
 │   └── go.mod
@@ -170,6 +172,7 @@ faultvane-go/
 | Core | `github.com/faultvane/faultvane-go` | Standard library |
 | Redis adapter | `github.com/faultvane/faultvane-go/store/redis` | Core, `github.com/redis/go-redis/v9` |
 | SQL adapter | `github.com/faultvane/faultvane-go/store/sql` | Core, `database/sql` |
+| MongoDB adapter | `github.com/faultvane/faultvane-go/store/mongodb` | Core, MongoDB Go driver |
 | OpenTelemetry | `github.com/faultvane/faultvane-go/otel` | Core, OpenTelemetry API |
 
 ## 7. Observability

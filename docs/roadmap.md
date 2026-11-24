@@ -19,9 +19,10 @@ flowchart LR
     M5 --> M6[M6 Hardening]
     M6 --> M7[M7 Release 0.1.0]
     M7 --> M8[M8 SQL adapter]
-    M8 --> M9[M9 Timeout and retry]
-    M9 --> M10[M10 Bulkhead and concurrency limiter]
-    M10 --> M11[M11 Rate limiter and load shedding]
+    M8 --> M9[M9 MongoDB adapter]
+    M9 --> M10[M10 Timeout and retry]
+    M10 --> M11[M11 Bulkhead and concurrency limiter]
+    M11 --> M12[M12 Rate limiter and load shedding]
 ```
 
 | Milestone | Result | Status |
@@ -35,7 +36,8 @@ flowchart LR
 | M6 | Chaos tests and benchmarks | Planned |
 | M7 | First release of the distributed circuit breaker | Planned |
 | M8 | SQL adapter | Planned |
-| M9 to M11 | The other resilience policies | Planned |
+| M9 | MongoDB adapter | Planned |
+| M10 to M12 | The other resilience policies | Planned |
 
 Each milestone delivers working and tested code.
 
@@ -201,7 +203,7 @@ Exit criteria:
 - The definition of done in section 5 is true.
 - The examples run with one command.
 
-## 3. Milestone for the SQL adapter
+## 3. Milestones for more store adapters
 
 ### M8: SQL adapter
 
@@ -217,13 +219,30 @@ Exit criteria:
 - The acceptance tests AT-1 to AT-6 pass with the adapter.
 - The documentation gives the measured latency of each operation and the lowest practical sync interval.
 
+### M9: MongoDB adapter
+
+Scope:
+
+- Design document for the document layout, the atomic updates, and the cleanup.
+- Adapter module on the official MongoDB Go driver.
+
+Exit criteria:
+
+- The adapter passes the conformance suite with a real MongoDB replica set.
+- The acceptance tests AT-1 to AT-6 pass with the adapter.
+- The documentation gives the minimum MongoDB version, the measured latency of each operation, and the lowest practical sync interval.
+
+### Later adapters
+
+[Stores](stores/README.md) lists the candidate adapters. A candidate becomes a milestone when a user needs it.
+
 ## 4. Milestones for the other policies
 
 Each policy gets its own requirements and design document before its implementation starts.
 Each policy must satisfy the toolkit requirements TK-1 to TK-53.
 Each milestone ends with a release.
 
-### M9: Timeout and retry
+### M10: Timeout and retry
 
 - Timeout for each attempt, with `timeout.ErrTimeout`.
 - Retry with backoff, jitter, and a retry budget.
@@ -232,12 +251,12 @@ Each milestone ends with a release.
 
 Requirements: PI-1 to PI-3.
 
-### M10: Bulkhead and concurrency limiter
+### M11: Bulkhead and concurrency limiter
 
 - Bulkhead with a fixed limit of concurrent calls and an optional wait queue with a limit.
 - Concurrency limiter that adapts the limit to the measured latency.
 
-### M11: Rate limiter and load shedding
+### M12: Rate limiter and load shedding
 
 - Local rate limiter.
 - Load shedding by priority.
@@ -256,7 +275,7 @@ Requirements: PI-1 to PI-3.
 - [ ] Concurrent transitions are safe.
 - [ ] An instance that starts continues from the authoritative state.
 - [ ] Store restart and failover are handled.
-- [ ] A dependency failure does not cause a retry storm. This item needs M9.
+- [ ] A dependency failure does not cause a retry storm. This item needs M10.
 - [ ] Metrics and logs give sufficient information for operation.
 - [ ] Benchmarks show that the cost is acceptable.
 - [ ] Each critical race has an automated test.
@@ -271,7 +290,7 @@ The owner of the project confirmed these decisions on 2026-11-24.
 |---|---|---|
 | Module path | `github.com/faultvane/faultvane-go` | Cheap before the first release. Expensive after it. |
 | Minimum Go version | 1.24 | Sets the language features that the code can use. |
-| Shared store | One interface with adapters. In-memory and Redis first, then SQL | See [ADR 0006](adr/0006-store-interface-and-adapters.md). |
+| Shared store | One interface with adapters. In-memory and Redis first, then SQL, then MongoDB | See [ADR 0006](adr/0006-store-interface-and-adapters.md). |
 | Redis client | `github.com/redis/go-redis/v9` | Sets the dependency of the Redis adapter module. |
 | Default start policy | `StartWithProbe` | See [ADR 0004](adr/0004-local-breaker-fallback.md). |
 | Default policy after the local mode time limit | `KeepLocalBreaker` | See [ADR 0004](adr/0004-local-breaker-fallback.md). |
