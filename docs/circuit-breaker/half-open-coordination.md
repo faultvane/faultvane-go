@@ -13,7 +13,7 @@ A probe permit is a lease in the store.
 | Atomic acquisition | The `AcquireProbe` operation checks the limit and adds the lease in one atomic step. |
 | Expiry | Each lease has an end time in store time. The default lease duration is 30 seconds. |
 | No permanent owner | A lease of a dead instance ends at its end time. A later probe request removes it. |
-| No duplicate probes | A token identifies each lease. The number of valid leases never exceeds the probe limit. |
+| No duplicate probes | A token identifies each lease. The token is a random 64-bit number that the instance creates. It is never 0. The number of valid leases never exceeds the probe limit. |
 
 The lease duration must be longer than the longest possible duration of a probe call.
 Use a timeout policy inside the breaker to limit the duration of a call.
@@ -67,18 +67,18 @@ After the probe call, the instance calls `CompleteProbe` with the generation, th
 | Result | Effect |
 |---|---|
 | Failure | Transition T4 to `OPEN`. A new open duration starts. |
-| Success | The success counter increases. When it reaches `HalfOpenSuccessThreshold`, transition T3 to `CLOSED`. |
+| Success | The success counter increases. When it reaches the half-open success threshold, transition T3 to `CLOSED`. |
 | Ignored | The lease is removed. The state does not change. Another call can get a lease. |
 
-If `CompleteProbe` fails because of a store fault, the instance does not try again without a limit.
+If `CompleteProbe` fails because of a store fault, the instance does not try again. The fault counts for the detection of a store fault.
 The lease ends at its end time.
 Then another call gets a lease and tests the dependency again.
 The result is a delay of the recovery, not an incorrect state.
 
 ## 5. More than one probe
 
-`HalfOpenMaxProbes` is the maximum number of valid leases at one time.
-`HalfOpenSuccessThreshold` is the number of successes that closes the circuit.
+`WithHalfOpenMaxProbes` sets the maximum number of valid leases at one time.
+`WithHalfOpenSuccessThreshold` sets the number of successes that closes the circuit.
 The default of both is 1.
 
 With a limit of 3 and a threshold of 3, at most 3 probes run at the same time.
@@ -89,7 +89,8 @@ One failure opens the circuit again.
 
 An instance in local mode cannot get a lease from the store.
 It then uses a local probe limit.
-Each instance in local mode permits `HalfOpenMaxProbes` probes of its own.
+Each instance in local mode permits the maximum number of probes of its own.
+A local lease has a token from a counter of the instance, not a random number.
 With N instances in local mode, at most N times the limit can run.
 [Degraded mode](degraded-mode.md) describes this weaker guarantee.
 
