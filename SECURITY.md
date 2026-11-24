@@ -2,8 +2,11 @@
 
 ## Supported versions
 
-Faultvane has no release yet.
-After the first release, this document lists the versions that receive security fixes.
+Only the latest release receives security fixes.
+
+| Version | Supported |
+|---|---|
+| 0.1.x | Yes |
 
 ## Report a vulnerability
 
