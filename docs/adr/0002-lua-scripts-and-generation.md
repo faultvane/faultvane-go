@@ -1,6 +1,6 @@
 # ADR 0002: Atomic transitions in Lua scripts with a generation
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 

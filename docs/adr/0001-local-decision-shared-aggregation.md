@@ -1,6 +1,6 @@
 # ADR 0001: Local decisions with batched shared aggregation
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 

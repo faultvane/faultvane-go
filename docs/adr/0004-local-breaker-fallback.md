@@ -1,6 +1,6 @@
 # ADR 0004: Local breaker as the fallback
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 
