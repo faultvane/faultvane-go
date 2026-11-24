@@ -160,3 +160,21 @@ func TestClose(t *testing.T) {
 		store.hang.Store(false)
 	})
 }
+
+func TestSynchronizerDelays(t *testing.T) {
+	t.Run("FD-7 the wait before an early report is the rest of the early report interval", func(t *testing.T) {
+		if got := earlyReportWait(10*time.Millisecond, 3*time.Millisecond); got != 7*time.Millisecond {
+			t.Fatalf("earlyReportWait() = %v, want 7ms", got)
+		}
+	})
+
+	t.Run("RF-3 the wait before a health check is between half of the limit and the limit", func(t *testing.T) {
+		for _, limit := range []time.Duration{0, 1, 2, 3, time.Second} {
+			for range 1000 {
+				if got := healthCheckDelay(limit); got < limit/2 || got > limit/2+limit/2 {
+					t.Fatalf("healthCheckDelay(%v) = %v, want a value from %v to %v", limit, got, limit/2, limit/2+limit/2)
+				}
+			}
+		}
+	})
+}
