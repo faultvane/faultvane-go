@@ -381,7 +381,7 @@ A token that a call removed does not come back. This is also true when a policy 
 - An instance does not give its tokens back when it stops. `Close` does not call the store. The tokens of a failed synchronization are also lost. The instances then permit fewer calls than the limit.
 - Each instance holds at least 1 token after it got one. When the number of instances is near the burst or above it, the tokens of idle instances are a large part of the burst.
 - In local mode, the instances do not coordinate. The total rate is the sum of the local rates.
-- Only four stores exist: the in-memory store, the Redis store, the SQL store for PostgreSQL and MySQL, and the MongoDB store. [Store](store.md) gives the limits of each store. The Redis store has tests with one Redis server without cluster mode and with one Redis server with cluster mode on. It has no test with a cluster of many nodes.
+- Only four stores exist: the in-memory store, the Redis store, the SQL store for PostgreSQL and MySQL, and the MongoDB store. [Store](store.md) gives the limits of each store. The Redis store has tests with one Redis server without cluster mode, with one Redis server with cluster mode on, and with a cluster of 3 nodes.
 - The limiter writes no log for a failed synchronization in local mode. `StoreErrors` counts these faults.
 - The observer gets no event for a call. The numbers of permitted and rejected calls come from `Stats`.
 - The limiter does not wait for a token. The application decides what to do after a rejection.
