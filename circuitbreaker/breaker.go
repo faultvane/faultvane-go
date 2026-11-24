@@ -43,6 +43,8 @@ type Breaker struct {
 	localSince time.Time
 	lastToken  uint64
 
+	responsesWithoutMismatch int
+
 	syncMu    sync.Mutex
 	wake      chan struct{}
 	stop      chan struct{}

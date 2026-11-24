@@ -215,7 +215,48 @@ func TestConfigMismatch(t *testing.T) {
 		f.assertStored(Closed, 3)
 	})
 
-	t.Run("FD-8 OB-6 the difference ends when the last writer has the equal configuration", func(t *testing.T) {
+	t.Run("FD-8 OB-6 two instances with different configurations that write in turns report the difference one time", func(t *testing.T) {
+		f := newFleet(t, 1)
+		f.add(different)
+		for range 50 {
+			for i, b := range f.breakers {
+				runTimes(t, b, 1, nil)
+				f.sync(i)
+			}
+			f.sync()
+		}
+		f.assertMismatch(true, true)
+		want := []Event{{Kind: ConfigMismatchChanged, Breaker: sharedName, Mode: Distributed, ConfigMismatch: true}}
+		for i, e := range f.events {
+			if got := mismatchEvents(e); !slices.Equal(got, want) {
+				t.Fatalf("instance %d: events = %+v, want %+v", i, got, want)
+			}
+		}
+	})
+
+	t.Run("FD-8 a response with a different fingerprint starts the count of responses again", func(t *testing.T) {
+		f := newFleet(t, 1)
+		f.add(different)
+		own, other := f.breakers[1].ConfigFingerprint(), f.breakers[0].ConfigFingerprint()
+		respond := func(fingerprint string, times int) {
+			f.memory.records[sharedName] = Record{Fingerprint: fingerprint}
+			for range times {
+				f.sync(1)
+			}
+		}
+		respond(other, 1)
+		respond(own, 9)
+		respond(other, 1)
+		respond(own, 9)
+		f.assertMismatch(false, true)
+		respond(own, 1)
+		f.assertMismatch(false, false)
+		if got := len(mismatchEvents(f.events[1])); got != 2 {
+			t.Fatalf("mismatch events = %d, want 2", got)
+		}
+	})
+
+	t.Run("FD-8 OB-6 the difference ends after 10 responses in sequence without a different fingerprint", func(t *testing.T) {
 		f := newFleet(t, 1)
 		f.add(different)
 		f.fail(0, 1)
@@ -224,10 +265,11 @@ func TestConfigMismatch(t *testing.T) {
 		f.assertMismatch(false, true)
 		f.fail(1, 1)
 		f.sync(1)
-		f.assertMismatch(false, true)
-		for range 3 {
+		for range 9 {
 			f.sync(1)
 		}
+		f.assertMismatch(false, true)
+		f.sync(1)
 		f.assertMismatch(false, false)
 		want := []Event{
 			{Kind: ConfigMismatchChanged, Breaker: sharedName, Mode: Distributed, ConfigMismatch: true},
@@ -251,6 +293,10 @@ func TestConfigMismatch(t *testing.T) {
 		f.sync()
 		f.assertMismatch(false, true)
 		f.memory.Delete(sharedName)
+		for range 9 {
+			f.sync()
+		}
+		f.assertMismatch(false, true)
 		f.sync()
 		f.assertMismatch(false, false)
 		if got := len(mismatchEvents(f.events[1])); got != 2 {
@@ -311,9 +357,9 @@ func TestConfigMismatch(t *testing.T) {
 		f.sync(1)
 		f.sync(1)
 		f.fail(1, 1)
-		f.sync(1)
-		f.sync(1)
-		f.sync(1)
+		for range 11 {
+			f.sync(1)
+		}
 		type line struct {
 			Level, Msg, Breaker, Mode string
 			Fingerprint               string

@@ -96,8 +96,15 @@ func (b *Breaker) adopt(snapshot Snapshot) {
 	}
 }
 
+const mismatchEndResponses = 10
+
 func (b *Breaker) compareConfig(snapshot Snapshot) {
-	mismatch := snapshot.Fingerprint != "" && snapshot.Fingerprint != b.fingerprint
+	different := snapshot.Fingerprint != "" && snapshot.Fingerprint != b.fingerprint
+	b.responsesWithoutMismatch++
+	if different {
+		b.responsesWithoutMismatch = 0
+	}
+	mismatch := different || b.counters.configMismatch.Load() && b.responsesWithoutMismatch < mismatchEndResponses
 	if b.counters.configMismatch.Swap(mismatch) != mismatch {
 		b.emit(Event{Kind: ConfigMismatchChanged, From: snapshot.State, To: snapshot.State, Generation: snapshot.Generation, Mode: Distributed, ConfigMismatch: mismatch})
 	}
