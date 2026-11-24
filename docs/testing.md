@@ -107,7 +107,7 @@ Result on 2026-11-24:
 |---|---|---|---|
 | `circuitbreaker` | 178 | 171 | 96.1% |
 | `timeout` | 6 | 6 | 100% |
-| `retry` | 30 | 30 | 100% |
+| `retry` | 26 | 26 | 100% |
 | `bulkhead` | 11 | 11 | 100% |
 | `concurrencylimit` | 23 | 23 | 100% |
 | `loadshed` | 15 | 15 | 100% |
