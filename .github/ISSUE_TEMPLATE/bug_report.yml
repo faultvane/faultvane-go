@@ -1,0 +1,48 @@
+name: Bug report
+description: Report behavior that is not correct.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The version or the commit of each Faultvane module that you use, and the Go version.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Circuit breaker
+        - Timeout
+        - Retry
+        - Bulkhead
+        - Concurrency limiter
+        - Rate limiter
+        - Load shedding
+        - Redis adapter
+        - SQL adapter
+        - MongoDB adapter
+        - OpenTelemetry module
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What occurs
+      description: Give the smallest program or test that shows the problem, and its output.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expect
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: The store and its version, the number of instances, and the configuration of the policy. Do not include credentials.
