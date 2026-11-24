@@ -8,23 +8,24 @@
 | [Architecture](architecture.md) | The layers, the policy model, shared state, and the module layout. |
 | [Policy composition](policy-composition.md) | The order of the policies and the interaction with retries. |
 | [Testing](testing.md) | The test levels, the coverage rule, and the quality gates. |
-| [Roadmap](roadmap.md) | The milestones, their exit criteria, and the definition of done. |
+| [Roadmap](roadmap.md) | The milestones, their results, and the open items. |
 | [Benchmarks](benchmarks.md) | Measured results with the machine and the Go version. |
 | [Decision records](adr/README.md) | The important design decisions, the alternatives, and the consequences. |
 
 ## Policies
 
-| Policy | Documents | Status |
-|---|---|---|
-| Circuit breaker | [Design documents](circuit-breaker/README.md) | Local breaker implemented. Shared state planned. |
-| Timeout | Not written | Planned |
-| Retry | Not written | Planned |
-| Bulkhead | Not written | Planned |
-| Concurrency limiter | Not written | Planned |
-| Rate limiter | Not written | Planned |
-| Load shedding | Not written | Planned |
+| Policy | Package | Documents | Status |
+|---|---|---|---|
+| Circuit breaker | `circuitbreaker` | [Design documents](circuit-breaker/README.md), [requirements](circuit-breaker/requirements.md) | Implemented, with local state and with shared state |
+| Timeout | `timeout` | [Guide](timeout/README.md), [requirements](timeout/requirements.md) | Implemented |
+| Retry | `retry` | [Guide](retry/README.md), [requirements](retry/requirements.md) | Implemented |
+| Bulkhead | `bulkhead` | [Guide](bulkhead/README.md), [requirements](bulkhead/requirements.md) | Implemented |
+| Concurrency limiter | `concurrencylimit` | [Guide](concurrencylimit/README.md), [requirements](concurrencylimit/requirements.md) | Implemented |
+| Rate limiter | `ratelimit` | [Guide](ratelimit/README.md), [requirements](ratelimit/requirements.md) | Implemented for one process. A limit that many instances share is not implemented. |
+| Load shedding | `loadshed` | [Guide](loadshed/README.md), [requirements](loadshed/requirements.md) | Implemented |
 
-Each policy gets its own directory with requirements and design documents before its implementation starts.
+Each policy has its own directory with a requirements document and a guide or design documents.
+Only the circuit breaker has metrics, logs, and an observer. The other policies do not have them yet.
 
 ## Shared state
 
@@ -32,6 +33,8 @@ Each policy gets its own directory with requirements and design documents before
 |---|---|
 | [Stores](stores/README.md) | The store interface, the adapters, the contract, and the conformance tests. |
 | [Redis adapter](stores/redis.md) | Keys, fields, atomic scripts, and TTL. |
+| [SQL adapter](stores/sql.md) | The table, the transactions, and the cleanup for PostgreSQL and MySQL. |
+| [MongoDB adapter](stores/mongodb.md) | The document, the compare-and-set, and the TTL index. |
 
 ## Glossary
 
@@ -43,7 +46,7 @@ Each policy gets its own directory with requirements and design documents before
 | Rejection | The decision of a policy not to run a call. |
 | Dependency | The remote system that the application calls through a policy. |
 | Instance | One running process of an application that uses the library. |
-| Store | The system that keeps shared state, for example Redis or a SQL database. |
+| Store | The system that keeps shared state, for example Redis, a SQL database, or MongoDB. |
 | Adapter | The implementation of a store interface for one type of store. |
 | Contract | The rules that each adapter must satisfy. |
 | Request path | The code that runs in the goroutine of an application request. |
@@ -51,6 +54,7 @@ Each policy gets its own directory with requirements and design documents before
 | Namespace | The scope in which a name is unique, for example `production`. Instances with the same namespace and name share one state. |
 | Authoritative state | The state in the store. It is the source of truth. |
 | Snapshot | The copy of the authoritative state in the memory of an instance. |
+| Record | The full shared data of one breaker: the state, the generation, the times, the leases, and the window buckets. The Go type `circuitbreaker.Record` holds it. |
 | Generation | A number that increases by one at each state transition of a breaker. |
 | Window | The record of the recent calls that a breaker uses to detect failure. |
 | Report | The batch of call counts that an instance sends to the store. |

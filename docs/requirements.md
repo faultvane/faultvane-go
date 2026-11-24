@@ -15,12 +15,12 @@ Faultvane gives a Go service the policies that stop this spread:
 | Policy | Purpose | Requirements |
 |---|---|---|
 | Circuit breaker | Stop calls to a dependency that fails. | [Circuit breaker requirements](circuit-breaker/requirements.md) |
-| Timeout | Limit the time of an attempt. | Written before its milestone |
-| Retry | Repeat an attempt that failed for a short time. | Written before its milestone |
-| Bulkhead | Limit the resources that one dependency can use. | Written before its milestone |
-| Concurrency limiter | Limit the calls that run at the same time, and adapt the limit. | Written before its milestone |
-| Rate limiter | Limit the calls in a time period. | Written before its milestone |
-| Load shedding | Reject low-priority work when the service is overloaded. | Written before its milestone |
+| Timeout | Limit the time of an attempt. | [Timeout requirements](timeout/requirements.md) |
+| Retry | Repeat an attempt that failed for a short time. | [Retry requirements](retry/requirements.md) |
+| Bulkhead | Limit the resources that one dependency can use. | [Bulkhead requirements](bulkhead/requirements.md) |
+| Concurrency limiter | Limit the calls that run at the same time, and adapt the limit. | [Concurrency limiter requirements](concurrencylimit/requirements.md) |
+| Rate limiter | Limit the calls in a time period. | [Rate limiter requirements](ratelimit/requirements.md) |
+| Load shedding | Reject low-priority work when the service is overloaded. | [Load shedding requirements](loadshed/requirements.md) |
 
 ## 2. Goals
 

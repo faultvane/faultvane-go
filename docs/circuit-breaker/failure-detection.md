@@ -9,8 +9,11 @@ Each call that the breaker permits gets one of these results:
 | Result | Default rule |
 |---|---|
 | Success | The call returns no error. |
-| Failure | The call returns an error, or the deadline of its context ends. |
-| Ignored | The caller cancels the context. The breaker does not count the call. |
+| Ignored | The call returns an error that matches `context.Canceled`. The breaker does not count the call. |
+| Failure | The call returns a different error, for example `context.DeadlineExceeded`. A panic of the call is also a failure. |
+
+The function `circuitbreaker.DefaultClassifier` is this rule.
+The rule reads only the error that the call returns. A call that returns no error after its deadline is a success.
 
 The application can replace the default rule with a classifier function.
 For example, the application can classify a "not found" error as a success.
@@ -25,12 +28,13 @@ The circuit opens when one of these conditions is true for the window:
 
 | Condition | Options |
 |---|---|
-| The number of failures is equal to or larger than the failure count threshold. | `FailureThreshold` |
-| The number of calls is equal to or larger than the minimum, and the failure rate is equal to or larger than the failure rate threshold. | `MinimumCalls`, `FailureRateThreshold` |
-| The number of calls is equal to or larger than the minimum, and the slow call rate is equal to or larger than the slow call rate threshold. | `MinimumCalls`, `SlowCallDuration`, `SlowCallRateThreshold` |
+| The number of failures is equal to or larger than the failure count threshold. | `WithFailureThreshold` |
+| The number of calls is equal to or larger than the minimum, and the failure rate is equal to or larger than the failure rate threshold. | `WithMinimumCalls`, `WithFailureRateThreshold` |
+| The number of calls is equal to or larger than the minimum, and the slow call rate is equal to or larger than the slow call rate threshold. | `WithMinimumCalls`, `WithSlowCallDuration`, `WithSlowCallRateThreshold` |
 
 The failure rate condition is always on.
 The other two conditions are off when their thresholds have no value.
+The method `Thresholds.Exceeded` is this condition. The local breaker, the in-memory, SQL, and MongoDB adapters use it. The Redis report script has the same condition in Lua.
 
 ## 3. Window
 
@@ -67,8 +71,10 @@ The pending counts are the results that the instance did not send to the store y
 The synchronizer sends the pending counts as a report:
 
 ```text
-Report(generation, calls, failures, slowCalls)
+Report(generation, calls, failures, slowCalls, thresholds, windowSize, windowBuckets, openDuration, stateTTL)
 ```
+
+The report carries the thresholds and the window settings of the instance that sends it. The store keeps no configuration.
 
 The store handles a report in one atomic operation.
 The [store contract](../stores/README.md) defines this operation for all adapters.
@@ -102,9 +108,9 @@ If the fault continues, the instance changes to local mode and uses the local wi
 
 The failure condition uses the thresholds of the instance that sends the report.
 During a rolling deployment, instances can have different thresholds for a short time.
-The state contains a fingerprint of the configuration of the last writer.
-When an instance sees a different fingerprint, it logs a warning and increments a metric.
 The breaker continues to operate.
+
+The library does not detect this difference. The configuration fingerprint of the first design is not implemented: the state has no fingerprint, and no log or metric reports a difference.
 
 ## 7. Limits of the design
 

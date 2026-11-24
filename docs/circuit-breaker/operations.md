@@ -1,7 +1,7 @@
 # Operations
 
 This document is for the engineers who run applications that use Faultvane.
-It describes the planned behavior. The values get an update when measurements exist.
+It describes the implemented behavior. [Benchmarks](../benchmarks.md) gives the measured values.
 
 ## 1. Deployment patterns
 
@@ -20,7 +20,7 @@ Services often have different timeouts and different traffic. One shared failure
 Select the store that your application already operates.
 [Stores](../stores/README.md) compares the adapters.
 
-- The request path does not call the store. A slower store gives slower propagation, not slower requests.
+- The request path does not call the store in the `CLOSED` state. A slower store gives slower propagation, not slower requests. Only a probe request and the result of a probe call the store from the request path.
 - Put the store near the application. The store timeout default is 100 ms.
 
 ### Redis
@@ -38,17 +38,20 @@ maximum:  instances × breakers × (1 / EarlyReportInterval) operations each sec
 
 With the defaults, 100 instances and 5 breakers give 1000 operations each second in normal operation.
 The request rate of the application does not change this number.
+The system benchmark measured approximately 2 store operations each second for each instance with one breaker. [Benchmarks](../benchmarks.md) gives the results.
 
 ## 3. Rollout of a new application version
 
-- New and old library versions use the same data layout in the store. Each adapter keeps a schema version.
-- During a rolling deployment, instances can have different thresholds. The library logs a configuration mismatch. This stops when the deployment ends.
+- No release exists yet, so no two released versions exist. After version 1.0, the data layout of each adapter is a compatibility commitment.
+- The Redis adapter keeps a schema version in the state hash. The SQL adapter and the MongoDB adapter keep no schema version.
+- During a rolling deployment, instances can have different thresholds. The library does not detect this difference. The condition stops when the deployment ends.
 - To change a threshold safely, deploy the new value to all instances. No change in the store is necessary.
 
 ## 4. Shutdown
 
-Call `store.Close(ctx)` when the application stops.
-The store sends the last report with the time limit of the context and stops its goroutine.
+Call `breaker.Close(ctx)` for each breaker with a store when the application stops.
+`Close` stops the synchronizer goroutine and sends the last report. The store timeout and the context limit this operation.
+The adapters have no `Close` method. The application closes the client of the store.
 A probe lease of a stopped instance ends at its end time.
 
 ## 5. Failure modes
@@ -59,10 +62,9 @@ A probe lease of a stopped instance ends at its end time.
 | The circuit does not open during an outage | `MinimumCalls` is higher than the traffic in the window, or errors are classified as success | Lower `MinimumCalls` or set `FailureThreshold`. |
 | The circuit flaps between `OPEN` and `CLOSED` | The dependency is partly healthy. One probe success closes the circuit too early | Raise `HalfOpenSuccessThreshold` and `HalfOpenMaxProbes`. Raise `OpenDuration`. |
 | The circuit stays `HALF_OPEN` | Probes get no result, for example the calls hang | Add a timeout policy. Make `ProbeTimeout` longer than the timeout. |
-| Instances are in local mode | The store is not reachable or slow | Examine `store_errors_total` and `store_latency_seconds`. Examine the network and the store. |
+| Instances are in local mode | The store is not reachable or slow | Examine the metrics `store_errors` and `store.duration`. Examine the network and the store. |
 | Instances show different states | Some instances are in local mode | Examine the `mode` metric of each instance. |
-| `stale_writes_total` is high | Many instances report at a transition. This is normal for a short time | No action, unless it continues. |
-| `config_mismatch_total` increases | Instances have different configurations | Make the configuration equal. |
+| The circuit opens at different thresholds | Instances have different configurations. The library does not detect this condition | Make the configuration equal. |
 
 ## 6. Limits to know
 

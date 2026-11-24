@@ -3,7 +3,7 @@
 The bulkhead limits the number of calls that run at the same time for one dependency.
 One slow dependency then cannot use all goroutines, memory, and connections of the service.
 
-Status: implemented in the package `bulkhead`. Metrics through the observer are planned.
+Status: implemented in the package `bulkhead`. The bulkhead has no metrics, no logs, and no observer yet.
 
 | Document | Content |
 |---|---|

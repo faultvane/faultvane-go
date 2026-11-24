@@ -170,4 +170,4 @@ go test -run '^$' -bench . -benchmem ./timeout
 - The policy does not know if the dependency completed the work before the time limit ended.
 - When an error of the call and the end of the time limit occur at almost the same time, the result can be a timeout error. It contains the error of the call.
 - The time limit is fixed for the life of a policy instance. For a different time limit, create a second instance.
-- The policy has no metrics and no logs yet. Observability is planned for all policies.
+- The policy has no metrics, no logs, and no observer yet.

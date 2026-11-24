@@ -7,17 +7,26 @@ An **adapter** implements the interface for one type of store.
 
 ## 1. Adapters
 
-| Adapter | Package | Module | Status |
+| Adapter | Go package | Module | Status |
 |---|---|---|---|
-| In-memory | `store/memory` | Core | Planned for the first release |
-| [Redis](redis.md) | `store/redis` | Separate | Planned for the first release |
-| SQL database | `store/sql` | Separate | Planned after the first release |
-| MongoDB | `store/mongodb` | Separate | Planned after the SQL adapter |
+| In-memory | `circuitbreaker` (`NewMemoryStore`) | Core | Implemented |
+| [Redis](redis.md) | `redisstore` in `store/redis` | Separate | Implemented |
+| [SQL database](sql.md) | `sqlstore` in `store/sql` | Separate | Implemented for PostgreSQL and MySQL |
+| [MongoDB](mongodb.md) | `mongostore` in `store/mongodb` | Separate | Implemented |
 | Your own | Your package | Your module | See section 6 |
+
+No module has a release tag yet.
 
 The in-memory adapter keeps the state in one process.
 Use it for tests and for an application with one instance.
 It is also the reference implementation of the contract.
+
+```go
+store := circuitbreaker.NewMemoryStore(faultvane.SystemClock())
+```
+
+`NewMemoryStore` gets the clock of the store as its argument.
+The method `Delete` removes the data of one breaker. Tests use it to simulate data loss.
 
 ## 2. Interface
 
@@ -48,8 +57,28 @@ Each operation returns the authoritative state after its work, as a `Snapshot`:
 Snapshot(state, generation, transitionTime, openDuration, storeTime)
 ```
 
-The values that an operation needs, for example the thresholds and the window settings, are fields of its argument.
+The values that an operation needs, for example the thresholds, the window settings, and the state TTL, are fields of its argument.
 The store keeps no configuration.
+
+### The record type
+
+The package `circuitbreaker` exports the type `Record`.
+A `Record` is the full shared data of one breaker: the state, the generation, the transition time, the open duration, the number of probe successes, the leases, and the window buckets.
+It is a pure value. Its methods make no I/O and read no clock.
+
+| Method | Store operation |
+|---|---|
+| `Report(now, report) Record` | `Report` |
+| `AcquireProbe(now, request) (Record, bool)` | `AcquireProbe` |
+| `CompleteProbe(now, result) Record` | `CompleteProbe` |
+| `Restore(snapshot) Record` | `Restore` |
+| `Snapshot(now) Snapshot` | The response of each operation |
+
+An adapter written in Go can use `Record` for all transition logic.
+The adapter then does only three things: read the record and the store time atomically, call the method, and write the result.
+The in-memory, SQL, and MongoDB adapters work in this way. They share one implementation of the transitions.
+The Redis adapter cannot run Go code in the store. Its Lua scripts are a second implementation.
+[ADR 0007](../adr/0007-shared-record-for-go-adapters.md) records this decision.
 
 ### Why the interface is at this level
 
@@ -95,62 +124,88 @@ A store without the first property cannot satisfy C1 and C2. Do not write an ada
 |---|---|
 | Permit decision, local window, pending counts | Core |
 | Synchronizer, timeouts, fault detection, local mode, reconciliation | Core |
-| Logs, metrics, events | Core |
+| Logs, events, counters | Core |
+| OpenTelemetry metrics and trace attributes | The module `otel` |
 | The five operations and their atomic behavior | Adapter |
 | The data layout in the store and its cleanup | Adapter |
 | The connection, TLS, and authentication | The client that the application supplies |
 
 Degraded mode, reconciliation, and observability work the same with each adapter, because the core owns them.
-An adapter is small. It contains no timers, no retries, and no goroutines.
+An adapter is small. It contains no timers and no goroutines.
+An adapter does not retry a failed operation. The MongoDB adapter repeats its compare-and-set at most 16 times when a different instance wrote first.
 
 ## 5. Conformance tests
 
-The package `store/storetest` contains one test suite for the contract.
+The package `circuitbreaker/storetest` contains one test suite for the contract.
 Each adapter runs the suite against a real instance of its store.
 
 ```go
 func TestConformance(t *testing.T) {
+    client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6399"})
+    t.Cleanup(func() { _ = client.Close() })
+
     storetest.Run(t, func(t *testing.T) circuitbreaker.Store {
-        return redisstore.New(newClient(t), redisstore.WithNamespace(storetest.Namespace(t)))
+        namespace := fmt.Sprintf("test-%d", time.Now().UnixNano())
+        store, err := redisstore.New(client, redisstore.WithNamespace(namespace))
+        if err != nil {
+            t.Fatal(err)
+        }
+        return store
     })
 }
 ```
 
+`Run` calls the function one time for each check. Each check uses its own breaker name.
+
 The suite contains:
 
-- A test for each branch of each operation.
-- The same random event sequences that the property tests of the state machine use. The result of the adapter must be equal to the result of the pure state machine.
-- Concurrency tests for C1, C2, C4, and C6.
-- Tests for expired leases, with a clock that the suite controls where the store permits it.
+- Checks for the transitions, the generation rules, the window, the leases, restore, the isolation of breakers, the store time, and an ended context. The name of each check starts with the contract rule that it proves, for example `C6`.
+- Concurrency checks for C1, C4, and C6: concurrent probe requests get exactly the limit, and concurrent reports open the circuit one time.
+- Random sequences of operations. The suite runs each sequence on the adapter and on the in-memory store. The states, the generations, and the probe grants must be equal.
+
+The suite cannot control the clock of a real store. It uses short durations and waits for a condition with a time limit.
 
 An adapter is correct when it passes the suite.
-The acceptance tests AT-1 to AT-6 of the [requirements](../circuit-breaker/requirements.md) also run against each adapter of the repository.
+
+### Acceptance tests with each adapter
+
+The acceptance tests of the [requirements](../circuit-breaker/requirements.md) run in these places:
+
+| Test | In-memory | Redis | SQL | MongoDB |
+|---|---|---|---|---|
+| AT-1 Shared failure detection | Yes | Yes | Yes | Yes |
+| AT-2 One probe for all instances | Yes | Yes | Yes | Yes |
+| AT-3 Operation without the store | Yes | Yes | No | No |
+| AT-4 Reconciliation | Yes | Yes | No | No |
+| AT-5 Stale write | Yes | No | No | No |
+| AT-6 No split-brain condition | Yes | Yes | No | No |
+| AT-7 System benchmark | No | Yes | No | No |
+| Restore after data loss (RF-5) | Yes | Yes | Yes | Yes |
+
+The core owns local mode and reconciliation, so AT-3, AT-4, and AT-6 do not depend on the adapter.
+For AT-5, the conformance suite has a check with each adapter: a report with a different generation adds nothing.
 
 ## 6. Write your own adapter
 
-1. Implement the `Store` interface in your own module.
+1. Implement the `Store` interface in your own module. When the adapter is in Go and the store has no script language, use `circuitbreaker.Record` for the transitions.
 2. Decide how your store gives rule C1. Write it in the documentation of the adapter.
 3. Decide which clock gives rule C5.
 4. Run `storetest.Run` against a real instance of your store. Do not use a mock.
 5. Document the limits of your store: latency, data loss conditions, and cleanup.
 
-## 7. Notes on the planned SQL adapter
+## 7. Adapter documents
 
-The detailed design comes with its milestone.
-These points are fixed now, because they show that the interface fits a database:
+| Adapter | Document | Atomic mechanism |
+|---|---|---|
+| Redis | [Redis adapter](redis.md) | One Lua script for each operation |
+| PostgreSQL, MySQL | [SQL adapter](sql.md) | One transaction with `SELECT ... FOR UPDATE` on the row of the breaker |
+| MongoDB | [MongoDB adapter](mongodb.md) | Compare-and-set on a version field of one document |
 
-| Topic | Approach |
-|---|---|
-| Atomic operation | One transaction for each operation, with a lock on the row of the breaker. |
-| Data layout | One row for each breaker with the state, the generation, and the times. The window buckets and the leases are in the same row or in two child tables. |
-| Clock | The time of the database server. |
-| Cleanup | A delete of rows that had no write for longer than the state TTL. |
-| API | `database/sql`, so the application selects the driver. |
+Each document gives the data layout, the clock, the cleanup, the setup code, the limits, and the measured latency.
 
-A database has more latency for each operation than Redis, and each report is a write transaction.
-This does not affect application requests, because the request path does not call the store.
+A database has more latency for each operation than Redis, and each report is a write.
+This does not affect application requests, because the request path does not call the store in the `CLOSED` state.
 It affects the lowest practical sync interval.
-The SQL adapter will document measured limits.
 
 ## 8. Candidate adapters
 
@@ -158,15 +213,15 @@ This table shows which stores can satisfy the contract.
 
 | Store | Fits the contract | Atomic mechanism | Clock | Status |
 |---|---|---|---|---|
-| Redis | Yes | Lua script | `TIME` | First release |
-| PostgreSQL, MySQL | Yes | Transaction with a row lock | Database server time | Planned |
-| MongoDB | Yes | `findOneAndUpdate` with an update pipeline on one document for each breaker | `$$NOW`. Needs MongoDB 4.2 or later. | Planned |
+| Redis | Yes | Lua script | `TIME` | Implemented |
+| PostgreSQL, MySQL | Yes | Transaction with a row lock | Database server time | Implemented |
+| MongoDB | Yes | Compare-and-set on a version field of one document for each breaker | `$$NOW`. Needs MongoDB 4.4 or later. | Implemented |
 | etcd | Yes | Transaction with a compare on the revision | Leases of the server | Candidate |
 | DynamoDB | Partly | Conditional write | No server clock that a write can read. The adapter needs a different clock source. | Candidate |
 | Memcached | No | Compare-and-set on one value only | None | Not possible |
 
 A candidate becomes a milestone of the [roadmap](../roadmap.md) when a user needs it.
-The statements for the candidates come from the documentation of the stores. The design document of each adapter must confirm them with tests.
+The statements for the rows with the status `Candidate` or `Not possible` come from the documentation of the stores. The project did not test them.
 
 Each adapter has a cost: tests against a real store with the full coverage minimum, the conformance suite, a container in continuous integration, and maintenance for each new version of the store and of its client library.
 After version 1.0, the data layout of an adapter is a compatibility commitment.
@@ -174,11 +229,16 @@ For this reason, the project adds an adapter only when it has users.
 
 ## 9. Comparison of the adapters
 
-| Property | In-memory | Redis | SQL database |
-|---|---|---|---|
-| Shares state between instances | No | Yes | Yes |
-| Atomic mechanism | Mutex | Lua script | Transaction with row lock |
-| Clock | Process clock | Redis server time | Database server time |
-| Cleanup | Not necessary | Key TTL | Delete of old rows |
-| Typical latency of an operation | Nanoseconds | Below 1 ms | Milliseconds |
-| Extra infrastructure | None | Redis | The database of the application |
+| Property | In-memory | Redis | SQL database | MongoDB |
+|---|---|---|---|---|
+| Shares state between instances | No | Yes | Yes | Yes |
+| Atomic mechanism | Mutex | Lua script | Transaction with row lock | Compare-and-set on a version |
+| Implementation of the transitions | `Record` | Lua scripts | `Record` | `Record` |
+| Clock | The clock that the application gives | Redis server time, microseconds | Database server time, microseconds | MongoDB server time, milliseconds |
+| Cleanup | None. `Delete` removes one breaker. | Key TTL | Delete of expired rows, at most one time each minute after a report | TTL index |
+| Setup step | None | None | `Migrate` | `EnsureIndexes` |
+| Measured `Load` | Not measured | Not measured | 0.29 ms (PostgreSQL), 0.26 ms (MySQL) | 0.17 ms |
+| Measured `Report` | Not measured | 0.13 ms | 0.86 ms (PostgreSQL), 2.0 ms (MySQL) | 0.50 ms |
+| Extra infrastructure | None | Redis | The database of the application | MongoDB |
+
+The measured values come from one machine with each store in a local container. [Benchmarks](../benchmarks.md) gives the conditions.
