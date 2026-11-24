@@ -9,7 +9,7 @@ Each instance holds a snapshot of the authoritative state in memory.
 The request path reads only this snapshot.
 A background task, the synchronizer, exchanges data with the shared store.
 
-The store can be Redis, a SQL database, or another system.
+The store can be Redis, a SQL database, MongoDB, or another system.
 The breaker uses it through an adapter.
 
 ```mermaid
@@ -44,14 +44,15 @@ The design has four rules:
 
 | Component | Responsibility | Location |
 |---|---|---|
-| State machine | Pure functions that calculate the next state from the current state and an event. No I/O. | Core |
-| Window | Lock-free counters of calls, failures, and slow calls in time buckets. | Core |
-| Breaker | The public type. It makes the permit decision from the snapshot and records results. | Core |
-| Synchronizer | One background goroutine for each breaker that has a store. It sends reports, refreshes the snapshot, detects store faults, and reconciles. | Core |
-| Store interface | Five operations on the shared state. | Core |
-| Store adapter | The implementation of the interface for one type of store. | Core for in-memory, separate modules for the others |
-| Conformance suite | The tests that each adapter must pass. | Core |
-| Observer | The interface for metrics, logs, and traces. | Core |
+| State machine | The pure type `Record` and the type `Thresholds`. Their methods calculate the next state from the current state and an event. No I/O. | `circuitbreaker/record.go`, `thresholds.go` |
+| Window | Lock-free counters of calls, failures, and slow calls in time buckets. | `circuitbreaker/window.go` |
+| Breaker | The public type. It makes the permit decision from the snapshot and records results. | `circuitbreaker/breaker.go`, `permit.go` |
+| Synchronizer | One background goroutine for each breaker that has a store. It sends reports, refreshes the snapshot, detects store faults, and reconciles. | `circuitbreaker/sync.go` |
+| Store interface | Five operations on the shared state. | `circuitbreaker/store.go` |
+| Store adapter | The implementation of the interface for one type of store. | `circuitbreaker/store.go` for in-memory, the modules `store/redis`, `store/sql`, and `store/mongodb` for the others |
+| Conformance suite | The tests that each adapter must pass. | `circuitbreaker/storetest` |
+| Observer, counters, logs | The interface for events, the counters of `Stats`, and the logs with `log/slog`. | `circuitbreaker/observe.go` |
+| Metrics and trace attributes | The export of the counters to OpenTelemetry. | The module `otel` |
 
 The state machine and the window do not know about the store.
 The same state machine runs in distributed mode and in local mode.
@@ -86,6 +87,7 @@ The `CLOSED` path and the `OPEN` path do these operations only:
 - Two reads of the monotonic clock, to measure the call duration.
 
 These paths take no lock, allocate no memory, and do not call the store.
+[Benchmarks](../benchmarks.md) gives the measured time.
 
 Only a probe attempt calls the store from the request path.
 A probe attempt has a strict timeout.
@@ -96,6 +98,8 @@ All other calls in that instance get an immediate rejection.
 
 The synchronizer sends a report for its breaker.
 A report contains the number of calls, failures, and slow calls since the last report, and the generation in which the instance recorded them.
+It also contains the thresholds, the window settings, the open duration, and the state TTL of the instance.
+When the instance has no new counts, the synchronizer reads the state with `Load`.
 
 The store adds the report to the shared window in one atomic operation.
 The same operation evaluates the failure condition and makes the transition to `OPEN`.
@@ -123,8 +127,8 @@ The synchronizer runs at these times:
 | Sync interval | 500 ms | Send the counts and refresh the snapshot. |
 | A recorded failure | At most one early report each 50 ms | Detect an outage quickly. |
 
-An adapter can add a faster propagation, for example a notification of each transition.
-Correctness never depends on it.
+No adapter has a faster propagation, for example a notification of each transition. That function is not implemented.
+The sync interval gives the propagation.
 
 ### Limits that result from this design
 
@@ -134,19 +138,21 @@ Correctness never depends on it.
 - **Store load.** The maximum is one report for each instance and breaker in each early-report interval. With the defaults, 100 instances make at most 2000 small operations each second for a breaker that fails, and 200 for a healthy breaker.
 
 The store load does not depend on the request rate of the application.
+The system benchmark measured approximately 2 store operations each second for each instance, at a low and at a high request rate. [Benchmarks](../benchmarks.md) gives the results.
 The latency of a store operation sets the lowest practical sync interval for that store.
 
 ## 5. Time
 
 Clocks of different instances are not equal.
 For this reason, all times in the authoritative state come from one clock: the clock of the store.
-The Redis adapter uses the Redis server time. A SQL adapter uses the time of the database server.
+The Redis adapter uses the Redis server time. The SQL adapter uses the time of the database server. The MongoDB adapter uses the time of the MongoDB server.
 
 Each response from the store contains the store time.
-The instance calculates the difference between the store clock and its monotonic clock.
-With this difference, the instance knows locally when the open duration ends.
+From the transition time, the open duration, and the store time, the instance calculates the remaining open duration.
+It adds this duration to the time of its own clock.
+The instance then knows locally when the open duration ends, and the difference between the clocks has no effect.
 
-In local mode, the instance uses only its monotonic clock and durations.
+In local mode, the instance uses only its own clock and durations.
 
 ## 6. Modes
 
@@ -168,17 +174,19 @@ The core implements both. They work the same with each adapter.
 
 | Data | Protection |
 |---|---|
-| Snapshot | `atomic.Pointer` to an immutable value. The synchronizer replaces the pointer. |
-| Window buckets | Atomic counters. |
+| Snapshot | `atomic.Pointer` to an immutable value. A change of state replaces the pointer. |
+| Window buckets, pending counts, counters of `Stats` | Atomic counters. |
 | Probe attempt in progress | One atomic flag for each breaker. |
-| Synchronizer state | Owned by the synchronizer goroutine only. |
+| Local record, last authoritative snapshot, count of store faults | One mutex for each breaker. |
+| One synchronization at a time | A second mutex. `Close` and the synchronizer goroutine use it. |
 
-The breaker has no mutex on the request path.
+The `CLOSED` path and the `OPEN` path take no mutex.
+The request path takes the mutex only for a probe, for a local transition, and after a store fault.
 
 Each breaker with a store owns one synchronizer goroutine.
 `Close` stops the goroutine and sends the last report with a time limit.
 A breaker without a store starts no goroutine.
-Tests use a goroutine leak detector.
+Tests compare the number of goroutines before and after.
 
 An application has a small and fixed number of breakers, so one goroutine for each breaker is cheap.
 A shared synchronizer that sends the reports of many breakers in one batch is a possible optimization.
@@ -192,3 +200,4 @@ It needs a measurement that shows a benefit first.
 - [ADR 0004: Local breaker as the fallback](../adr/0004-local-breaker-fallback.md)
 - [ADR 0005: One repository with a dependency-free core module](../adr/0005-module-layout.md)
 - [ADR 0006: Store interface with adapters](../adr/0006-store-interface-and-adapters.md)
+- [ADR 0007: One exported record type for the adapters written in Go](../adr/0007-shared-record-for-go-adapters.md)
