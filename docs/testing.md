@@ -224,9 +224,10 @@ The tests of each adapter with a real store contain:
 - The data layout and the cleanup of the adapter.
 - Each operation returns `faultvane.ErrStoreUnavailable` when the store does not answer.
 
+The tests of each adapter also contain: the connection stops and starts again, with reconciliation (AT-3, AT-4, AT-6).
+
 Only the tests of the Redis adapter also contain:
 
-- The connection stops and starts again, with reconciliation (AT-3, AT-4, AT-6).
 - A slow store delays no call.
 - One Redis server with cluster mode on: all keys of one breaker are in one slot.
 
@@ -239,10 +240,10 @@ No separate scheduled chaos gate exists, and no test stops or restarts a contain
 
 | Fault | Method | Where | Assertions |
 |---|---|---|---|
-| Store unavailable | A fake store returns errors. A TCP proxy stops the connection to Redis. | Core module, Redis adapter | Requests continue. Local mode starts. After the connection is back, the instance reconciles. |
+| Store unavailable | A fake store returns errors. A TCP proxy stops the connection to Redis. A test closes the connections to PostgreSQL, MySQL, and MongoDB and refuses new connections. | Core module, each adapter | Requests continue. Local mode starts. After the connection is back, the instance reconciles. |
 | Store slow | The TCP proxy adds a delay of 100 ms. | Redis adapter | Local mode starts. 1000 calls complete in less than 100 ms. |
 | Store data loss | The test deletes the data of the breaker in the store. | Core module, each adapter | `Restore` writes the last authoritative snapshot again. The highest generation wins. |
-| Store partition | The TCP proxy stops the connection of a part of the instances. | Redis adapter | The instances get different local states. After the partition, all instances converge to the state of the store. |
+| Store partition | The test stops the connection of a part of the instances. | Each adapter | The instances get different local states. After the partition, all instances converge to the state of the store. |
 | Dependency unavailable | The fake dependency fails. | Core module, each adapter | The circuit opens for all instances. |
 | Dependency recovery | The fake dependency succeeds again. | Core module, each adapter | One probe. The circuit closes for all instances. |
 | Application restart | The test creates a new instance during `OPEN`. | Core module | The new instance reads `OPEN`. |
