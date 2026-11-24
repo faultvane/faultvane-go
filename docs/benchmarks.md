@@ -14,7 +14,7 @@ A statement about performance in a different document must refer to a result her
 | Clock | System clock |
 | Stores | Redis, PostgreSQL, MySQL, and MongoDB in local Docker containers, from `docker-compose.test.yml` |
 
-All results come from this one machine.
+All results come from this one machine, except the section "Core benchmarks on Linux".
 No result comes from a Linux server that is typical for production. The absolute values can be different there.
 
 ## Run the benchmarks
@@ -183,6 +183,47 @@ FAULTVANE_SYSTEM_TEST=1 go test -count=1 -run TestSystem -v ./...
 ```
 
 The workflow `.github/workflows/system.yml` runs the same command each week.
+
+## Core benchmarks on Linux
+
+| Item | Value |
+|---|---|
+| Date | 2026-11-24 |
+| Commit | `ce6c88c` |
+| Machine | GitHub runner `ubuntu-latest`, AMD EPYC 7763, 4 processors |
+| Go | The stable version of the runner |
+| Command | The workflow `benchmarks.yml`: `go test -run '^$' -bench . -benchmem -count 5 ./...` |
+
+Each value is the median of 5 runs.
+
+| Policy | Benchmark | Time for each call | Allocations |
+|---|---|---|---|
+| Circuit breaker | `Do`, closed | 153 ns | 0 |
+| Circuit breaker | `Do`, closed, parallel | 64 ns | 0 |
+| Circuit breaker | `Do`, open | 74 ns | 0 |
+| Timeout | `Do` | 395 ns | 4 |
+| Timeout | `Do`, parallel | 189 ns | 4 |
+| Retry | `Do`, success | 4.4 ns | 0 |
+| Retry | `Do`, success with a budget, parallel | 18 ns | 0 |
+| Retry | Three failed attempts | 73 ns | 0 |
+| Bulkhead | `Do` | 16 ns | 0 |
+| Bulkhead | `Do`, parallel | 60 ns | 0 |
+| Concurrency limiter | `Do` | 18 ns | 0 |
+| Concurrency limiter | `Do`, with a latency threshold | 128 ns | 0 |
+| Concurrency limiter | `Do`, parallel | 87 ns | 0 |
+| Rate limiter | Permitted call | 70 ns | 0 |
+| Rate limiter | Permitted call, parallel | 71 ns | 0 |
+| Rate limiter | Permitted call with a store | 70 ns | 0 |
+| Rate limiter | Permitted call with a store, parallel | 75 ns | 0 |
+| Load shedding | Admitted call | 11 ns | 0 |
+| Load shedding | Admitted call, parallel | 105 ns | 0 |
+
+What the results show:
+
+- Each policy adds less than 1 µs to a call on this machine. The targets of requirement PF-2 are satisfied.
+- A rate limiter with a store has the same cost for a call as a rate limiter without a store.
+- A runner is a shared virtual machine. The values change between runs. They do not replace a measurement on the servers of an application.
+- The store operations and the system benchmark have no result from Linux in this document.
 
 ## What is not measured
 
