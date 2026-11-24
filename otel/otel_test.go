@@ -113,6 +113,7 @@ func TestMetrics(t *testing.T) {
 			"faultvane.circuit_breaker.mode faultvane.breaker.mode=distributed" + p:                                    0,
 			"faultvane.circuit_breaker.mode faultvane.breaker.mode=local" + p:                                          1,
 			"faultvane.circuit_breaker.local_mode_expired" + p:                                                         0,
+			"faultvane.circuit_breaker.config_mismatch" + p:                                                            0,
 			"faultvane.circuit_breaker.calls" + p + " result=success":                                                  1,
 			"faultvane.circuit_breaker.calls" + p + " result=failure":                                                  2,
 			"faultvane.circuit_breaker.calls" + p + " result=ignored":                                                  1,
@@ -175,6 +176,30 @@ func TestMetrics(t *testing.T) {
 		}
 	})
 
+	t.Run("OB-6 the metrics show a configuration that is different from the configuration of the last writer", func(t *testing.T) {
+		reader := sdkmetric.NewManualReader()
+		meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+		breaker, err := circuitbreaker.New("shared", circuitbreaker.WithLogger(quiet), circuitbreaker.WithStore(differentWriter{}),
+			circuitbreaker.WithSyncInterval(time.Hour), circuitbreaker.WithWindowSize(100*time.Hour))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = breaker.Close(context.Background()) }()
+		if _, err := RegisterMetrics(meter, breaker); err != nil {
+			t.Fatal(err)
+		}
+		got := collect(t, reader)
+		s := " faultvane.breaker.name=shared"
+		for key, value := range map[string]int64{
+			"faultvane.circuit_breaker.config_mismatch" + s:                         1,
+			"faultvane.circuit_breaker.mode faultvane.breaker.mode=distributed" + s: 1,
+		} {
+			if got[key] != value {
+				t.Errorf("%s = %d, want %d", key, got[key], value)
+			}
+		}
+	})
+
 	t.Run("OB-1 a meter that cannot create an instrument gives an error", func(t *testing.T) {
 		if registration, err := RegisterMetrics(failing{failGauge: true}); registration != nil || err == nil {
 			t.Fatalf("RegisterMetrics() = %v, %v, want an error", registration, err)
@@ -210,6 +235,12 @@ func (down) CompleteProbe(context.Context, string, circuitbreaker.ProbeResult) (
 
 func (down) Restore(context.Context, string, circuitbreaker.Snapshot) (circuitbreaker.Snapshot, error) {
 	return circuitbreaker.Snapshot{}, errDown
+}
+
+type differentWriter struct{ down }
+
+func (differentWriter) Load(context.Context, string) (circuitbreaker.Snapshot, error) {
+	return circuitbreaker.Snapshot{StoreTime: start, Fingerprint: "v1:different"}, nil
 }
 
 type failing struct {
