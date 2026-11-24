@@ -152,3 +152,22 @@ A network between the application and MongoDB adds its round-trip time for each 
 - The tests run with MongoDB 7 as one server. The project has no test with MongoDB 4.4 and no test with a replica set or a sharded cluster.
 - The data loss handling is the same as for each adapter. When a document is lost, an instance calls `Restore` with its last authoritative snapshot. [Degraded mode](../circuit-breaker/degraded-mode.md) describes it.
 - The adapter has no metrics of its own. `faultvaneotel.InstrumentStore` measures the duration of each operation.
+
+## 9. Acceptance tests
+
+The file `store/mongodb/acceptance_test.go` runs these acceptance tests of the [requirements](../circuit-breaker/requirements.md) against MongoDB.
+
+| Test | Function | Method |
+|---|---|---|
+| AT-3 | `TestAT3_RequestsContinueWithoutTheStore` | The test stops the connection of one instance. The instance changes to local mode. All calls succeed. The local breaker opens after 2 failures. |
+| AT-4 | `TestAT4_ReconciliationKeepsTheNewerState` | The test stops the connection of one instance. A second instance opens the circuit in MongoDB. The test starts the connection again. The first instance takes the state `OPEN` with generation 1. |
+| AT-5 | `TestAT5_StaleWriterIsRejected` | MongoDB has `HALF_OPEN` with generation 100. Two instances get a probe. The first instance does the read step for its probe success. Then the probe failure of the second instance gives `OPEN` with generation 101. The write step of the first instance matches no document. Its second attempt changes nothing. MongoDB keeps `OPEN` with generation 101. |
+| AT-6 | `TestAT6_InstancesConvergeAfterTheOutage` | The test stops the connections of four instances. Two instances open locally and two stay closed. A report through a direct connection opens the circuit in MongoDB. The test starts the connections again. All instances get `OPEN` with generation 1 in distributed mode. |
+
+Each instance has its own MongoDB client.
+The test gives the client its own dialer.
+To stop a connection, the test closes all TCP connections of the client and refuses each new connection.
+The test does not stop the MongoDB container.
+
+The tests need the MongoDB of `docker-compose.test.yml`.
+`sh scripts/test-stores.sh` starts it.
