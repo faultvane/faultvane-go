@@ -193,6 +193,10 @@ func TestBatch(t *testing.T) {
 			t.Fatalf("request after 10 permitted calls and 1 rejected call = %+v, want 22 tokens", request)
 		}
 		assertStats(t, limiter, Stats{Permitted: 10, Rejected: 1, Allowance: 22})
+		synchronize(limiter)
+		if request := f.store.last(); request.Wanted != 0 || request.Returned != 21 {
+			t.Fatalf("request after an interval without calls = %+v, want 21 tokens back", request)
+		}
 	})
 
 	t.Run("RL-24 the limiter asks only for the tokens that it does not hold", func(t *testing.T) {
@@ -420,6 +424,9 @@ func TestLocalMode(t *testing.T) {
 			f.store.down.Store(true)
 			synchronize(limiter)
 			synchronize(limiter)
+			if mode := limiter.Stats().Mode; mode != Distributed {
+				t.Fatalf("mode after 2 faults in sequence = %v, want distributed", mode)
+			}
 			f.store.down.Store(false)
 			synchronize(limiter)
 		}
@@ -530,9 +537,12 @@ func TestLifecycle(t *testing.T) {
 		}
 	})
 
-	t.Run("RL-24 the synchronizer gets a larger batch after calls", func(t *testing.T) {
+	t.Run("RL-24 the synchronizer keeps one token and gets a larger batch after calls", func(t *testing.T) {
 		limiter := background(t, NewMemoryStore(faultvane.SystemClock()))
 		defer func() { _ = limiter.Close(context.Background()) }()
+		eventually(t, "an idle limiter keeps one token", func() bool {
+			return limiter.Stats() == Stats{Mode: Distributed, Allowance: 1}
+		})
 		eventually(t, "the allowance follows the demand", func() bool {
 			call(limiter, 20)
 			stats := limiter.Stats()
