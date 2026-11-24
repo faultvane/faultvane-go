@@ -270,7 +270,7 @@ Each requirement and each acceptance test has an identifier, for example `GEN-3`
 
 - The name of an acceptance test contains its identifier, for example `TestAT5_StaleWriterIsRejected`.
 - A test that proves a requirement names the identifier in a subtest name or in the test table.
-- The script `scripts/traceability.sh` runs in continuous integration. It reads `scripts/implemented-requirements.txt`, the list of the requirements that the completed milestones implement. The list has 288 identifiers. It fails when an identifier of the list has no test, or when a test names an identifier that the requirements documents do not define.
+- The script `scripts/traceability.sh` runs in continuous integration. It reads `scripts/implemented-requirements.txt`, the list of the requirements that the completed milestones implement. The list has 289 identifiers. It fails when an identifier of the list has no test, or when a test names an identifier that the requirements documents do not define.
 - A requirement about the documentation or about the process, for example TK-4 or QA-3, has no test in the code. A review checks it.
 
 ## 10. Benchmarks

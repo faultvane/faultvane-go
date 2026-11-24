@@ -42,6 +42,8 @@ All metric names start with `faultvane.circuit_breaker.`.
 | `mode` | Observable gauge | `faultvane.breaker.mode` | `1` for the current mode, `0` for the other mode. The values are `distributed` and `local`. |
 | `local_mode_expired` | Observable gauge | | `1` when local mode is longer than the maximum time. |
 | `config_mismatch` | Observable gauge | | `1` while a writer of the shared state has a different configuration. It goes back to `0` after 10 store responses in sequence without a different fingerprint. See [failure detection](failure-detection.md). |
+| `subscribe_failed` | Observable gauge | | `1` when the subscription to transition notifications failed. The breaker then uses the sync interval only. |
+| `notifications` | Observable counter | | Transition notifications that this instance got. It stays `0` when the adapter sends no notifications. |
 | `calls` | Observable counter | `result` | Calls that the breaker permitted. `result` is `success`, `failure`, or `ignored`. |
 | `slow_calls` | Observable counter | | Calls that were slow. |
 | `rejected_calls` | Observable counter | `faultvane.breaker.rejection_reason` | Calls that the breaker rejected. The reason is `open` or `probe_not_permitted`. |
@@ -150,7 +152,7 @@ Each log, except the log for an observer panic and the log for a failed subscrip
 
 The log for an observer panic has the attributes `breaker` and `panic`.
 The log for a failed subscription has the attributes `breaker` and `cause`. The breaker writes it at most one time. No event goes to the observer.
-`Stats().Notifications` and `Stats().SubscribeFailed` show the transition notifications. The OpenTelemetry module does not export these two fields.
+`Stats().Notifications` and `Stats().SubscribeFailed` show the transition notifications. The metrics `notifications` and `subscribe_failed` export them.
 
 Rules:
 
