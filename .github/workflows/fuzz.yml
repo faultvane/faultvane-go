@@ -21,6 +21,16 @@ jobs:
             target: FuzzMachine
           - package: ./circuitbreaker
             target: FuzzValidName
+          - package: ./timeout
+            target: FuzzNew
+          - package: ./retry
+            target: FuzzBackoffCeiling
+          - package: ./retry
+            target: FuzzBudgetRatio
+          - package: ./ratelimit
+            target: FuzzBucket
+          - package: ./loadshed
+            target: FuzzShedder
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
