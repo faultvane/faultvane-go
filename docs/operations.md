@@ -15,12 +15,19 @@ It describes the planned behavior. The values get an update when measurements ex
 Use separate breakers for each service unless you have a clear reason to share.
 Services often have different timeouts and different traffic. One shared failure condition then fits none of them.
 
-## 2. Redis
+## 2. Store
+
+Select the store that your application already operates.
+[Stores](stores/README.md) compares the adapters.
+
+- The request path does not call the store. A slower store gives slower propagation, not slower requests.
+- Put the store near the application. The store timeout default is 100 ms.
+
+### Redis
 
 - A small Redis is sufficient. Each breaker uses three small keys.
-- The breaker keys can share a Redis with other data. Then examine the eviction policy. See [Redis data model](circuit-breaker/redis-data-model.md).
+- The breaker keys can share a Redis with other data. Then examine the eviction policy. See [Redis adapter](stores/redis.md).
 - Persistence is not necessary.
-- Put Redis near the application. The store timeout default is 100 ms.
 
 ### Load estimate
 
@@ -34,9 +41,9 @@ The request rate of the application does not change this number.
 
 ## 3. Rollout of a new application version
 
-- New and old library versions use the same key schema. The field `v` gives the schema version.
+- New and old library versions use the same data layout in the store. Each adapter keeps a schema version.
 - During a rolling deployment, instances can have different thresholds. The library logs a configuration mismatch. This stops when the deployment ends.
-- To change a threshold safely, deploy the new value to all instances. No Redis change is necessary.
+- To change a threshold safely, deploy the new value to all instances. No change in the store is necessary.
 
 ## 4. Shutdown
 
@@ -52,7 +59,7 @@ A probe lease of a stopped instance ends at its end time.
 | The circuit does not open during an outage | `MinimumCalls` is higher than the traffic in the window, or errors are classified as success | Lower `MinimumCalls` or set `FailureThreshold`. |
 | The circuit flaps between `OPEN` and `CLOSED` | The dependency is partly healthy. One probe success closes the circuit too early | Raise `HalfOpenSuccessThreshold` and `HalfOpenMaxProbes`. Raise `OpenDuration`. |
 | The circuit stays `HALF_OPEN` | Probes get no result, for example the calls hang | Add a timeout policy. Make `ProbeTimeout` longer than the timeout. |
-| Instances are in local mode | Redis is not reachable or slow | Examine `store_errors_total` and `store_latency_seconds`. Examine the network and Redis. |
+| Instances are in local mode | The store is not reachable or slow | Examine `store_errors_total` and `store_latency_seconds`. Examine the network and the store. |
 | Instances show different states | Some instances are in local mode | Examine the `mode` metric of each instance. |
 | `stale_writes_total` is high | Many instances report at a transition. This is normal for a short time | No action, unless it continues. |
 | `config_mismatch_total` increases | Instances have different configurations | Make the configuration equal. |
@@ -61,5 +68,5 @@ A probe lease of a stopped instance ends at its end time.
 
 - An instance observes a transition at most one sync interval after it occurs. During this time, calls can still reach an unhealthy dependency.
 - In local mode, instances are not coordinated. Each instance has its own probe.
-- After a Redis failover that loses data, the circuit state can go back to an older authoritative state. The breaker then detects the failure again.
+- After a store failover that loses data, the circuit state can go back to an older authoritative state. The breaker then detects the failure again.
 - The library protects calls that go through a breaker. It cannot protect a dependency from callers that do not use it.

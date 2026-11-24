@@ -25,7 +25,7 @@ All metric names start with `faultvane_circuit_breaker_`.
 | `local_mode_total` | Counter | | Number of changes to local mode. |
 | `local_mode_expired` | Gauge | | `1` when local mode is longer than the maximum time. |
 | `reconciliations_total` | Counter | `result` | Reconciliations. `result` is `adopted`, `reported`, or `restored`. |
-| `stale_writes_total` | Counter | `operation` | Writes that Redis ignored because of an old generation. |
+| `stale_writes_total` | Counter | `operation` | Writes that the store ignored because of an old generation. |
 | `config_mismatch_total` | Counter | | Reports that found a different configuration fingerprint. |
 
 The metrics of the requirements map to these names:
@@ -56,8 +56,8 @@ The metrics system of the application adds the instance label.
 | Condition | Meaning |
 |---|---|
 | `state{state="open"} == 1` for longer than some minutes | The dependency is down. |
-| `mode{mode="local"} == 1` | The instance cannot reach Redis. |
-| `local_mode_expired == 1` | Redis is down for longer than the maximum time. |
+| `mode{mode="local"} == 1` | The instance cannot reach the store. |
+| `local_mode_expired == 1` | The store is down for longer than the maximum time. |
 | `transitions_total` increases quickly | The circuit flaps. Examine the thresholds. |
 | `config_mismatch_total` increases outside a deployment | Instances have different configurations. |
 
@@ -75,7 +75,7 @@ The library writes structured logs with `log/slog`.
 | Local mode is longer than the maximum time | `ERROR` | namespace, name, duration, policy |
 | Store reachable again | `INFO` | namespace, name, duration of local mode |
 | Reconciliation | `INFO` | namespace, name, local state, authoritative state, generations, result |
-| A write that Redis ignored | `DEBUG` | namespace, name, operation, generations |
+| A write that the store ignored | `DEBUG` | namespace, name, operation, generations |
 | Probe lease or result operation failed | `WARN` | namespace, name, generation, cause |
 | Configuration mismatch | `WARN` | namespace, name, the two fingerprints |
 

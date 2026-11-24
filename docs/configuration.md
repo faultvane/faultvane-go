@@ -47,18 +47,33 @@ All options have defaults.
 | `Observer` | None | The receiver of events and metrics. |
 | `Logger` | `slog.Default()` | The logger for transitions and faults. |
 
-## 2. Redis store options
+### Synchronization
+
+These options apply to a breaker with a store. They are the same for each adapter.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `StoreTimeout` | `100ms` | The time limit of each store operation. |
+| `SyncInterval` | `500ms` | The interval of reports and snapshot refreshes. |
+| `EarlyReportInterval` | `50ms` | The minimum time between two reports that a failure causes. |
+| `FaultThreshold` | `3` | The number of store faults in sequence that starts local mode. |
+| `StartTimeout` | `1s` | The time limit of the first read. |
+| `StateTTL` | `1h` | The time after which the store removes the data of a breaker without traffic. |
+
+## 2. Adapter options
+
+Each adapter has its own options. The namespace is an option of each adapter.
+
+### Redis adapter
 
 | Option | Default | Meaning |
 |---|---|---|
 | `Namespace` | Required | The scope of the breaker names, for example `production`. |
 | `KeyPrefix` | `faultvane` | The first part of each key. |
-| `Timeout` | `100ms` | The time limit of each Redis operation. |
-| `SyncInterval` | `500ms` | The interval of reports and snapshot refreshes. |
-| `EarlyReportInterval` | `50ms` | The minimum time between two reports that a failure causes. |
-| `FaultThreshold` | `3` | The number of store faults in sequence that starts local mode. |
-| `StartTimeout` | `1s` | The time limit of the first read. |
-| `StateTTL` | `1h` | The TTL of the keys of a breaker without traffic. |
+
+### In-memory adapter
+
+The in-memory adapter has no options.
 
 ## 3. Names from the requirements
 
@@ -71,12 +86,12 @@ All options have defaults.
 | `openStateDuration` | `OpenDuration` |
 | `halfOpenMaxProbes` | `HalfOpenMaxProbes` |
 | `probeTimeout` | `ProbeTimeout` |
-| `redisTimeout` | Store option `Timeout` |
-| `redisConnectionTimeout` | A setting of the Redis client that the application supplies |
+| `redisTimeout` | `StoreTimeout` |
+| `redisConnectionTimeout` | A setting of the store client that the application supplies |
 | `localFallbackEnabled` | `LocalFallbackEnabled` |
 | `maxLocalFallbackDuration` | `MaxLocalFallbackDuration` |
-| `stateRefreshInterval` | Store option `SyncInterval` |
-| `stateTTL` | Store option `StateTTL` |
+| `stateRefreshInterval` | `SyncInterval` |
+| `stateTTL` | `StateTTL` |
 
 ## 4. Validation rules
 
@@ -93,7 +108,7 @@ All options have defaults.
 | All durations are above 0. | Other values have no meaning. |
 | `WindowSize / WindowBuckets` is equal to or longer than `SyncInterval`. | A report must go into the correct bucket. |
 | `EarlyReportInterval` is not longer than `SyncInterval`. | An early report must be earlier. |
-| `Timeout` is shorter than `SyncInterval`. | One slow operation must not delay the next cycle. |
+| `StoreTimeout` is shorter than `SyncInterval`. | One slow operation must not delay the next cycle. |
 | `StateTTL` is at least `2 × (OpenDuration + WindowSize)`. | The TTL must not delete a state in use. |
 | `LocalModeExpiredPolicy` is not `KeepLocalBreaker` when `LocalFallbackEnabled` is `false`. | The two values disagree. |
 
@@ -102,5 +117,5 @@ All options have defaults.
 - Start with the defaults. Change a value only when a measurement shows a problem.
 - Set `OpenDuration` to the usual recovery time of the dependency.
 - Set `ProbeTimeout` longer than the longest possible call. Use a timeout policy to limit the call.
-- A lower `SyncInterval` gives faster propagation and more Redis load. [Architecture](architecture.md) gives the formula.
+- A lower `SyncInterval` gives faster propagation and more store load. [Architecture](architecture.md) gives the formula.
 - Use the same configuration for one breaker name in all instances. The library reports a difference. See [failure detection](circuit-breaker/failure-detection.md).

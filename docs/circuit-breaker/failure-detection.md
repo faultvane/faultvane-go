@@ -48,12 +48,12 @@ That record is against requirement FD-7.
 ## 4. Two windows
 
 Each instance has a **local window**.
-All instances together have a **shared window** in Redis.
+All instances together have a **shared window** in the store.
 
 | Window | Location | Content | Use |
 |---|---|---|---|
 | Local window | Memory of the instance | All calls of this instance | The failure condition in local mode |
-| Shared window | Redis | The sum of the reports of all instances | The failure condition in distributed mode |
+| Shared window | The store | The sum of the reports of all instances | The failure condition in distributed mode |
 
 In distributed mode, only the shared window opens the circuit.
 This gives the result that requirement FD-6 asks for:
@@ -62,7 +62,7 @@ This gives the result that requirement FD-6 asks for:
 ## 5. Reports
 
 The request path adds each result to the local window and to the **pending counts**.
-The pending counts are the results that the instance did not send to Redis yet.
+The pending counts are the results that the instance did not send to the store yet.
 
 The synchronizer sends the pending counts as a report:
 
@@ -70,18 +70,19 @@ The synchronizer sends the pending counts as a report:
 Report(generation, calls, failures, slowCalls)
 ```
 
-Redis handles a report in one atomic script:
+The store handles a report in one atomic operation.
+The [store contract](../stores/README.md) defines this operation for all adapters.
 
 1. Compare the generation of the report with the stored generation. If they are different, or the state is not `CLOSED`, ignore the counts.
-2. Add the counts to the current bucket of the shared window. The Redis time selects the bucket.
+2. Add the counts to the current bucket of the shared window. The store time selects the bucket.
 3. Remove the buckets that are older than the window size.
 4. Calculate the totals and evaluate the failure condition.
 5. If the condition is true, make transition T1.
-6. Return the authoritative state and the Redis time.
+6. Return the authoritative state and the store time.
 
 ### Time of a report
 
-A report goes into the bucket of the time at which Redis receives it.
+A report goes into the bucket of the time at which the store receives it.
 The error in time is at most one sync interval.
 For this reason, the bucket duration must be equal to or longer than the sync interval.
 The configuration validation checks this rule.
@@ -89,7 +90,7 @@ The configuration validation checks this rule.
 ### Loss of a report
 
 A report can fail, for example with a timeout.
-The instance then does not know if Redis added the counts.
+The instance then does not know if the store added the counts.
 The instance does not send the same counts again.
 A lost report makes the shared window smaller than the truth for a short time.
 A report that is counted two times can open a circuit for a healthy dependency. That error is worse.
@@ -109,4 +110,4 @@ The breaker continues to operate.
 
 - The shared window is the sum of reports, not an exact record of each call. Its error in time is at most one sync interval.
 - Between the time at which the shared window reaches the threshold and the next report, the circuit is still `CLOSED`. A recorded failure causes an early report to keep this time short.
-- An instance that cannot reach Redis does not add to the shared window. It protects the dependency with its local window.
+- An instance that cannot reach the store does not add to the shared window. It protects the dependency with its local window.
