@@ -20,14 +20,14 @@ func main() {
 		address = "127.0.0.1:6399"
 	}
 	if err := run(os.Stdout, address, fmt.Sprintf("example-%d", time.Now().UnixNano())); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
 func run(out io.Writer, address, namespace string) error {
 	client := redis.NewClient(&redis.Options{Addr: address})
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	store, err := redisstore.New(client, redisstore.WithNamespace(namespace))
 	if err != nil {
 		return err
@@ -46,13 +46,13 @@ func run(out io.Writer, address, namespace string) error {
 		if err != nil {
 			return err
 		}
-		defer instances[i].Close(ctx)
+		defer func() { _ = instances[i].Close(ctx) }()
 	}
 
 	outage := errors.New("inventory service: connection refused")
 	for i, instance := range instances {
 		_ = instance.Do(ctx, func(context.Context) error { return outage })
-		fmt.Fprintf(out, "instance %d: 1 failure, local view %s\n", i+1, instance.State())
+		_, _ = fmt.Fprintf(out, "instance %d: 1 failure, local view %s\n", i+1, instance.State())
 	}
 
 	deadline := time.Now().Add(10 * time.Second)
@@ -71,8 +71,8 @@ func run(out io.Writer, address, namespace string) error {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	fmt.Fprintln(out, "5 failures in the shared window: the circuit is open for all 5 instances")
+	_, _ = fmt.Fprintln(out, "5 failures in the shared window: the circuit is open for all 5 instances")
 	err = instances[0].Do(ctx, func(context.Context) error { return nil })
-	fmt.Fprintf(out, "next call on instance 1: %v\n", err)
+	_, _ = fmt.Fprintf(out, "next call on instance 1: %v\n", err)
 	return nil
 }

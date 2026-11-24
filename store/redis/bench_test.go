@@ -10,7 +10,7 @@ import (
 
 func BenchmarkOperations(b *testing.B) {
 	client := redis.NewClient(&redis.Options{Addr: standalone()})
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	store, err := New(client, WithNamespace("bench"))
 	if err != nil {
 		b.Fatal(err)

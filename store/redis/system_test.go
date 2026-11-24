@@ -42,7 +42,7 @@ func measure(t *testing.T, instances int, scenario string, pause time.Duration) 
 	const duration = 1500 * time.Millisecond
 	p := newProxy(t, standalone())
 	client := redis.NewClient(&redis.Options{Addr: p.listener.Addr().String(), DialTimeout: 100 * time.Millisecond, ReadTimeout: 100 * time.Millisecond, WriteTimeout: 100 * time.Millisecond, MaxRetries: -1, PoolSize: 20})
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	base := newStore(t, client)
 	var operations atomic.Int64
 	store := countingStore{Store: base, operations: &operations}

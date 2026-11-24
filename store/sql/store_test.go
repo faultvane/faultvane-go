@@ -111,7 +111,7 @@ func TestNew(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	invalid := map[string]func() (*Store, error){
 		"CFG-3 nil db":                     func() (*Store, error) { return New(nil, PostgreSQL, WithNamespace("a")) },

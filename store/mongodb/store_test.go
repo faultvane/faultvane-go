@@ -404,7 +404,7 @@ func BenchmarkOperations(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer client.Disconnect(context.Background())
+	defer func() { _ = client.Disconnect(context.Background()) }()
 	store, err := New(client.Database("faultvane_test").Collection("circuit_breakers"), WithNamespace(fmt.Sprintf("bench-%d", time.Now().UnixNano())))
 	if err != nil {
 		b.Fatal(err)

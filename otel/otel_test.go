@@ -52,7 +52,7 @@ func collect(t *testing.T, reader *sdkmetric.ManualReader) map[string]int64 {
 		for _, point := range points {
 			key := name
 			for _, pair := range point.Attributes.ToSlice() {
-				key += fmt.Sprintf(" %s=%s", pair.Key, pair.Value.Emit())
+				key += fmt.Sprintf(" %s=%s", pair.Key, pair.Value.String())
 			}
 			values[key] = point.Value
 		}
@@ -71,7 +71,7 @@ func collect(t *testing.T, reader *sdkmetric.ManualReader) map[string]int64 {
 				for _, point := range points.DataPoints {
 					key := m.Name
 					for _, pair := range point.Attributes.ToSlice() {
-						key += fmt.Sprintf(" %s=%s", pair.Key, pair.Value.Emit())
+						key += fmt.Sprintf(" %s=%s", pair.Key, pair.Value.String())
 					}
 					values[key] = int64(point.Count)
 				}
@@ -157,7 +157,7 @@ func TestMetrics(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer breaker.Close(context.Background())
+		defer func() { _ = breaker.Close(context.Background()) }()
 		if _, err := RegisterMetrics(meter, breaker); err != nil {
 			t.Fatal(err)
 		}
@@ -250,7 +250,7 @@ func TestTraced(t *testing.T) {
 		ended := recorder.Ended()
 		got := map[attribute.Key]string{}
 		for _, pair := range ended[len(ended)-1].Attributes() {
-			got[pair.Key] = pair.Value.Emit()
+			got[pair.Key] = pair.Value.String()
 		}
 		return got, err
 	}

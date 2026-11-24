@@ -99,7 +99,7 @@ func TestConformance(t *testing.T) {
 
 func TestNew(t *testing.T) {
 	client := redis.NewClient(&redis.Options{Addr: standalone()})
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	invalid := map[string][]Option{
 		"SEC-1 CFG-3 no namespace":                {},
 		"CFG-3 namespace with a colon":            {WithNamespace("a:b")},
@@ -274,7 +274,7 @@ func TestData(t *testing.T) {
 func TestFaults(t *testing.T) {
 	t.Run("RF-1 ERR-3 each operation on a Redis that does not answer returns ErrStoreUnavailable", func(t *testing.T) {
 		client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", DialTimeout: 100 * time.Millisecond, MaxRetries: -1})
-		defer client.Close()
+		defer func() { _ = client.Close() }()
 		store := newStore(t, client)
 		ctx := context.Background()
 		_, loadErr := store.Load(ctx, "a")
