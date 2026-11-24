@@ -128,7 +128,8 @@ defer registration.Unregister()
 pipeline := faultvane.Combine(faultvaneotel.Traced(breaker), attempt)
 ```
 
-The other policies have no metrics, no logs, and no observer yet.
+The timeout, retry, bulkhead, concurrency limiter, and load shedding policies have statistics (`Stats`) and OpenTelemetry metrics. They write no logs and have no observer.
+The rate limiter has no statistics and no metrics yet.
 
 ## Documentation
 

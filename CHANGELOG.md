@@ -10,6 +10,7 @@ No release exists yet. This section lists what the repository contains.
 
 ### Added
 
+- Statistics for the timeout, retry, bulkhead, concurrency limiter, and load shedding policies: a `Stats` method in each package, and the functions `RegisterTimeoutMetrics`, `RegisterRetryMetrics`, `RegisterBulkheadMetrics`, `RegisterConcurrencyLimitMetrics`, and `RegisterLoadShedMetrics` in the `otel` module.
 - Mutation gate: the tool `tools/mutation` and `scripts/mutation.sh` check a mutation score of 90% or more for each policy package.
 - Scenario tests in Docker: 10 pods, a controllable dependency, and Redis, PostgreSQL, MySQL, and MongoDB.
 - Correction: the rate limiter does not reject a call when a goroutine uses a clock value from before the last refill.

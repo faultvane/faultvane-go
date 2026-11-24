@@ -203,7 +203,8 @@ The circuit breaker is the only policy with observability now.
 The attributes have a low and fixed cardinality.
 The circuit breaker [observability](circuit-breaker/observability.md) document gives the names.
 
-The timeout, retry, bulkhead, concurrency limiter, rate limiter, and load shedding policies have no metrics, no logs, and no observer yet.
+The timeout, retry, bulkhead, concurrency limiter, and load shedding policies have statistics (`Stats`) and OpenTelemetry metrics. They write no logs and have no observer.
+The rate limiter has no statistics and no metrics yet.
 The core package defines no observer interface.
 The bulkhead, the concurrency limiter, and the load shedding policy have methods that return their current numbers, for example `InFlight`. The guide of each policy lists them.
 

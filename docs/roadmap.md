@@ -54,7 +54,7 @@ These criteria apply to each milestone from M1.
 |---|---|
 | All quality gates of [testing.md](testing.md) section 1 pass. | The active gates pass in continuous integration. The benchmark comparison is not active. |
 | The statement coverage is 98% or more for each module and 95% or more for each package (QA-1, QA-2). | Continuous integration enforces it for the core module, the three adapter modules, and the `otel` module. |
-| Each requirement that the milestone names has a test with its identifier (QA-5). | 235 of the 251 requirements are in `scripts/implemented-requirements.txt`, and each has a test. The other 16 are requirements about the process, the documentation, or performance targets: QA-1 to QA-7, QA-10 to QA-12, QA-14, SEC-2, TK-4, and TK-51 to TK-53. No test names them. |
+| Each requirement that the milestone names has a test with its identifier (QA-5). | 245 of the 261 requirements are in `scripts/implemented-requirements.txt`, and each has a test. The other 16 are requirements about the process, the documentation, or performance targets: QA-1 to QA-7, QA-10 to QA-12, QA-14, SEC-2, TK-4, and TK-51 to TK-53. No test names them. |
 | Each scenario that the design documents of the milestone describe has a test. | Not verified for each scenario. The tests of each milestone exist. |
 | The mutation score of the critical packages that the milestone changes is 90% or more (QA-9). | The mutation gate measures it each day for the seven policy packages. [Testing](testing.md) section 2 records the result. |
 
@@ -202,7 +202,7 @@ Differences from the plan:
 - The metrics `stale_writes` and `config_mismatch` do not exist.
 - The traces have no attribute for the generation and no child span for a probe.
 - A failed health check in local mode gives no log and no event. It only increases a counter.
-- Only the circuit breaker has observability. See section 5.
+- The circuit breaker has full observability. Five other policies have statistics and metrics. See section 5.
 
 ### M6: Hardening
 
@@ -321,7 +321,8 @@ Result:
 |---|---|
 | No release tag | No module has a version tag. Each separate module uses a `replace` directive to the core in the same repository, and requires the core with the version `v0.0.0`. A release needs a tag for each module and a real version in each `go.mod`. The release is the decision of the owner. |
 | Mutants that survive | 7 mutants survive in `circuitbreaker/sync.go`. No test proves the condition that decides if a snapshot replaces the local view, and no test proves the delay calculation of the synchronizer loop. The mutation gate does not apply to `circuitbreaker/storetest` (score 63.2%), to the store adapters, or to the `otel` module. |
-| Observability of the other policies | The timeout, retry, bulkhead, concurrency limiter, rate limiter, and load shedding policies have no metrics, no logs, and no observer. Only the circuit breaker satisfies the toolkit requirements TK-40 to TK-42. |
+| Observability of the other policies | The timeout, retry, bulkhead, concurrency limiter, and load shedding policies have statistics and OpenTelemetry metrics, but no logs and no observer. The rate limiter has no statistics and no metrics. Only the circuit breaker satisfies all of the toolkit requirements TK-40 to TK-42. |
+| Cost of the retry statistics | Each call of the retry policy writes one shared counter. With 10 parallel goroutines and an empty call, one call takes about 51 ns. Before the statistics it took 0.6 ns. A counter for each processor removes this cost but adds code. Examine it again if a profile of a real service shows the retry policy. |
 | Configuration fingerprint | Not implemented. The library does not detect different configurations between instances. |
 | Transition notifications | Not implemented. The Redis adapter does not use Pub/Sub. The sync interval gives the propagation. |
 | Benchmarks | All results come from one Apple M4 machine with the stores in local containers. No result comes from a Linux server that is typical for production. |
