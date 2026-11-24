@@ -1,36 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Faultvane">
   <title>Faultvane</title>
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14263D"/><stop offset="1" stop-color="#0A121F"/></linearGradient>
-    <radialGradient id="glow" cx="256" cy="256" r="300" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFB020" stop-opacity="0.28"/><stop offset="1" stop-color="#FFB020" stop-opacity="0"/></radialGradient>
-    <linearGradient id="hub" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFC24A"/><stop offset="1" stop-color="#F09A00"/></linearGradient>
-  </defs>
-  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <rect width="512" height="512" rx="112" fill="url(#glow)"/>
-  <circle cx="256" cy="256" r="206.4" fill="none" stroke="#FFB020" stroke-opacity="0.28" stroke-width="2.8" stroke-dasharray="5.2 12.0"/>
-  <path d="M256.0 152.8L256.0 72.0" stroke="#FFB020" stroke-opacity="0.55" stroke-width="3.4" stroke-linecap="round"/>
-  <path d="M336.7 191.7L399.9 141.3" stroke="#FFB020" stroke-opacity="0.55" stroke-width="3.4" stroke-linecap="round"/>
-  <path d="M356.6 279.0L386.8 285.9" stroke="#FFB020" stroke-opacity="0.55" stroke-width="3.4" stroke-linecap="round"/>
-  <path d="M410.3 291.2L435.4 297.0" stroke="#FF6B6B" stroke-opacity="0.75" stroke-width="3.4" stroke-linecap="round" stroke-dasharray="3.4 8.6"/>
-  <path d="M300.8 349.0L335.9 421.8" stroke="#FFB020" stroke-opacity="0.55" stroke-width="3.4" stroke-linecap="round"/>
-  <path d="M211.2 349.0L176.1 421.8" stroke="#FFB020" stroke-opacity="0.55" stroke-width="3.4" stroke-linecap="round"/>
-  <path d="M155.4 279.0L76.6 297.0" stroke="#FFB020" stroke-opacity="0.55" stroke-width="3.4" stroke-linecap="round"/>
-  <path d="M175.3 191.7L112.1 141.3" stroke="#FFB020" stroke-opacity="0.55" stroke-width="3.4" stroke-linecap="round"/>
-  <circle cx="256.0" cy="49.6" r="22.4" fill="#101C2E" stroke="#FFB020" stroke-width="5.2"/>
-  <circle cx="417.4" cy="127.3" r="22.4" fill="#101C2E" stroke="#FFB020" stroke-width="5.2"/>
-  <circle cx="457.2" cy="301.9" r="22.4" fill="#101C2E" stroke="#FF6B6B" stroke-width="5.2"/>
-  <circle cx="345.6" cy="442.0" r="22.4" fill="#101C2E" stroke="#FFB020" stroke-width="5.2"/>
-  <circle cx="166.4" cy="442.0" r="22.4" fill="#101C2E" stroke="#FFB020" stroke-width="5.2"/>
-  <circle cx="54.8" cy="301.9" r="22.4" fill="#101C2E" stroke="#FFB020" stroke-width="5.2"/>
-  <circle cx="94.6" cy="127.3" r="22.4" fill="#101C2E" stroke="#FFB020" stroke-width="5.2"/>
-  <circle cx="256" cy="256" r="92.9" fill="url(#hub)" stroke="#FFD27A" stroke-width="5.2"/>
-  <g transform="translate(145.9 139.1) scale(0.430)"><g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M256 250V388M204 388H308" stroke="#3B2A00" stroke-width="26"/>
-    <g transform="rotate(-14 256 216)">
-      <path d="M120 216H208M304 216H368" stroke="#0B1524" stroke-width="30"/>
-      <path d="M84 164L164 216L84 268L110 216Z" fill="#0B1524" stroke="#0B1524" stroke-width="14"/>
-      <path d="M362 166L436 216L362 266Z" fill="#0B1524" stroke="#0B1524" stroke-width="14"/>
-      <circle cx="256" cy="216" r="27" stroke="#FFFFFF" stroke-width="22"/>
-    </g>
-  </g></g>
+  <defs><linearGradient id="amber" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFC94D"/><stop offset="1" stop-color="#F08A00"/></linearGradient></defs>
+  <rect width="512" height="512" rx="112" fill="url(#amber)"/>
+  <g transform="translate(-22 20)" fill="#0B1524">
+    <rect x="146" y="112" width="64" height="288" rx="14"/>
+    <path d="M146 126a14 14 0 0 1 14-14h150v-34a8 8 0 0 1 13-6l88 66a8 8 0 0 1 0 13l-88 66a8 8 0 0 1-13-6v-35H146z"/>
+    <rect x="250" y="236" width="104" height="64" rx="14"/>
+  </g>
 </svg>

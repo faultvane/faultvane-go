@@ -4,7 +4,7 @@
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14263D"/><stop offset="1" stop-color="#0A121F"/></linearGradient>
     <radialGradient id="glow" cx="1050" cy="180" r="330" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFB020" stop-opacity="0.30"/><stop offset="1" stop-color="#FFB020" stop-opacity="0"/></radialGradient>
     <linearGradient id="title" x1="0" y1="0" x2="1" y2="0"><stop offset="0.35" stop-color="#FFFFFF"/><stop offset="1" stop-color="#FFD58A"/></linearGradient>
-    <linearGradient id="hub" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFC24A"/><stop offset="1" stop-color="#F09A00"/></linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFC94D"/><stop offset="1" stop-color="#F08A00"/></linearGradient><linearGradient id="hub" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFC24A"/><stop offset="1" stop-color="#F09A00"/></linearGradient>
     <clipPath id="frame"><rect width="1280" height="360" rx="28"/></clipPath>
   </defs>
   <g clip-path="url(#frame)">
@@ -17,31 +17,11 @@
   <rect x="82" y="276" width="130" height="38" rx="19.0" fill="#FFFFFF" fill-opacity="0.05" stroke="#FFB020" stroke-opacity="0.45"/><text x="147" y="301" text-anchor="middle" font-family="Inter, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="16" font-weight="500" fill="#FFFFFF">7 policies</text>
   <rect x="223.60000000000002" y="276" width="309" height="38" rx="19.0" fill="#FFFFFF" fill-opacity="0.05" stroke="#FFB020" stroke-opacity="0.45"/><text x="378" y="301" text-anchor="middle" font-family="Inter, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="16" font-weight="500" fill="#FFFFFF">Shared state between instances</text>
   <rect x="544.4000000000001" y="276" width="264" height="38" rx="19.0" fill="#FFFFFF" fill-opacity="0.05" stroke="#FFB020" stroke-opacity="0.45"/><text x="676" y="301" text-anchor="middle" font-family="Inter, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="16" font-weight="500" fill="#FFFFFF">Core without dependencies</text>
-  <circle cx="1050" cy="180" r="120.0" fill="none" stroke="#FFB020" stroke-opacity="0.28" stroke-width="1.6" stroke-dasharray="3.0 7.0"/>
-  <path d="M1050.0 120.0L1050.0 73.0" stroke="#FFB020" stroke-opacity="0.55" stroke-width="2.0" stroke-linecap="round"/>
-  <path d="M1096.9 142.6L1133.7 113.3" stroke="#FFB020" stroke-opacity="0.55" stroke-width="2.0" stroke-linecap="round"/>
-  <path d="M1108.5 193.4L1126.0 197.4" stroke="#FFB020" stroke-opacity="0.55" stroke-width="2.0" stroke-linecap="round"/>
-  <path d="M1139.7 200.5L1154.3 203.8" stroke="#FF6B6B" stroke-opacity="0.75" stroke-width="2.0" stroke-linecap="round" stroke-dasharray="2.0 5.0"/>
-  <path d="M1076.0 234.1L1096.4 276.4" stroke="#FFB020" stroke-opacity="0.55" stroke-width="2.0" stroke-linecap="round"/>
-  <path d="M1024.0 234.1L1003.6 276.4" stroke="#FFB020" stroke-opacity="0.55" stroke-width="2.0" stroke-linecap="round"/>
-  <path d="M991.5 193.4L945.7 203.8" stroke="#FFB020" stroke-opacity="0.55" stroke-width="2.0" stroke-linecap="round"/>
-  <path d="M1003.1 142.6L966.3 113.3" stroke="#FFB020" stroke-opacity="0.55" stroke-width="2.0" stroke-linecap="round"/>
-  <circle cx="1050.0" cy="60.0" r="13.0" fill="#101C2E" stroke="#FFB020" stroke-width="3.0"/>
-  <circle cx="1143.8" cy="105.2" r="13.0" fill="#101C2E" stroke="#FFB020" stroke-width="3.0"/>
-  <circle cx="1167.0" cy="206.7" r="13.0" fill="#101C2E" stroke="#FF6B6B" stroke-width="3.0"/>
-  <circle cx="1102.1" cy="288.1" r="13.0" fill="#101C2E" stroke="#FFB020" stroke-width="3.0"/>
-  <circle cx="997.9" cy="288.1" r="13.0" fill="#101C2E" stroke="#FFB020" stroke-width="3.0"/>
-  <circle cx="933.0" cy="206.7" r="13.0" fill="#101C2E" stroke="#FFB020" stroke-width="3.0"/>
-  <circle cx="956.2" cy="105.2" r="13.0" fill="#101C2E" stroke="#FFB020" stroke-width="3.0"/>
-  <circle cx="1050" cy="180" r="54.0" fill="url(#hub)" stroke="#FFD27A" stroke-width="3.0"/>
-  <g transform="translate(986.0 112.0) scale(0.250)"><g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M256 250V388M204 388H308" stroke="#3B2A00" stroke-width="26"/>
-    <g transform="rotate(-14 256 216)">
-      <path d="M120 216H208M304 216H368" stroke="#0B1524" stroke-width="30"/>
-      <path d="M84 164L164 216L84 268L110 216Z" fill="#0B1524" stroke="#0B1524" stroke-width="14"/>
-      <path d="M362 166L436 216L362 266Z" fill="#0B1524" stroke="#0B1524" stroke-width="14"/>
-      <circle cx="256" cy="216" r="27" stroke="#FFFFFF" stroke-width="22"/>
-    </g>
+  <g transform="translate(960 90) scale(0.3516)"><rect width="512" height="512" rx="112" fill="url(#amber)"/>
+  <g transform="translate(-22 20)" fill="#0B1524">
+    <rect x="146" y="112" width="64" height="288" rx="14"/>
+    <path d="M146 126a14 14 0 0 1 14-14h150v-34a8 8 0 0 1 13-6l88 66a8 8 0 0 1 0 13l-88 66a8 8 0 0 1-13-6v-35H146z"/>
+    <rect x="250" y="236" width="104" height="64" rx="14"/>
   </g></g>
   </g>
 </svg>
