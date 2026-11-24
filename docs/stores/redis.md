@@ -322,10 +322,36 @@ The effect is limited to results that are in progress at that time. Probe tokens
 | Topic | Rule |
 |---|---|
 | Version | Redis 6.2 or later, or a compatible server. The tests of the project run with Redis 7 only. |
-| Topology | Standalone and Cluster. The hash tag makes all scripts single-slot. The tests run against one standalone server and against one server with cluster mode on. The project has no test with Sentinel and no test with a cluster of many nodes. For this reason, no test shows that a message goes from one node of a cluster to a subscriber on a different node. |
+| Topology | Standalone and Cluster. The hash tag makes all scripts single-slot. The tests run against one standalone server, against one server with cluster mode on, and against a Redis Cluster of 3 primary nodes. See "Tests with a Redis Cluster" below. The project has no test with Sentinel, no test with replicas, and no test of a failover. |
 | Eviction | Use a policy that does not evict these keys, or accept that eviction is handled as data loss. |
 | Persistence | Not necessary. Section 11 covers the loss of data. |
 | Security | TLS and authentication are settings of the Redis client that the application supplies. |
+
+### Tests with a Redis Cluster
+
+The tests in `store/redis/cluster_test.go` use a Redis Cluster of 3 primary nodes without replicas.
+The service `redis-cluster-nodes` of `docker-compose.test.yml` starts it. One container runs three `redis-server` processes on the ports 6391, 6392, and 6393.
+Each node announces the address `127.0.0.1` and its port. Docker publishes each port with the same number.
+The nodes are in one container, so they reach each other on `127.0.0.1`. The tests run on the host and reach the nodes on the same addresses through the published ports.
+For this reason, the addresses that the cluster gives to a client are correct on Linux and on macOS with Docker Desktop.
+The container makes the cluster when it starts. Its health check passes when each node reports `cluster_state:ok`.
+
+The tests connect with a `redis.ClusterClient` that gets the slot map from the cluster.
+The variable `FAULTVANE_REDIS_CLUSTER_NODES_ADDR` sets the address of the first node. The default is `127.0.0.1:6391`.
+A test fails when the cluster does not answer in 15 seconds. No test skips.
+The tests find the node of a key with `CLUSTER KEYSLOT` and `CLUSTER SLOTS`. They then send `EXISTS` to each node directly: the node of the key finds the key, and each other node answers `MOVED`.
+
+The tests show these facts:
+
+- The conformance suite of the circuit breaker store passes, with and without notifications.
+- The conformance suite of the rate limit store passes.
+- Breakers and rate limits of one namespace on three different nodes keep separate states. All keys and the channel of one name are on one node.
+- Ten instances, each with its own cluster client, open the circuit of a breaker together (acceptance test AT-1). The test runs one time for a breaker on each node.
+- A cluster client subscribes on the node of the breaker. The command `PUBSUB NUMSUB` on each node shows this.
+- A notification goes from the node of the breaker to a subscriber on a different node. The test uses each of the 6 pairs of different nodes. The subscriber is a `*redis.Client` that connects to one node only.
+- A breaker keeps its window after its slot moves to a different node with `CLUSTER SETSLOT` and `MIGRATE`. The cluster client follows the `MOVED` answer. A subscription that started on the old node still gets the notification.
+
+The tests do not show the behavior during a slot move with keys on both nodes, with a node that stops, or with a failover.
 
 ## 13. Measured latency
 

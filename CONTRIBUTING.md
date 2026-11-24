@@ -49,7 +49,8 @@ sh scripts/test-stores.sh
 ```
 
 This script needs Docker.
-It starts Redis, a Redis with cluster mode on, PostgreSQL, MySQL, and MongoDB from `docker-compose.test.yml`.
+It starts Redis, a Redis with cluster mode on, a Redis Cluster of 3 nodes, PostgreSQL, MySQL, and MongoDB from `docker-compose.test.yml`.
+The Redis Cluster uses the host ports 6391, 6392, and 6393.
 It runs `scripts/coverage.sh` in each adapter module against these stores.
 Then it removes the containers.
 

@@ -229,6 +229,26 @@ func (s *countedStore) Report(ctx context.Context, name string, report circuitbr
 	return s.Store.Report(ctx, name, report)
 }
 
+func observeEachTransition(t *testing.T, writer, reader *circuitbreaker.Breaker) {
+	t.Helper()
+	for range 5 {
+		_ = call(writer, errDependency)
+	}
+	eventually(t, "the reader is open", func() bool { return reader.State() == circuitbreaker.Open })
+	var probe circuitbreaker.Permit
+	eventually(t, "the writer gets the probe", func() bool {
+		var err error
+		probe, err = writer.Allow(context.Background())
+		return err == nil
+	})
+	eventually(t, "the reader is half-open", func() bool { return reader.State() == circuitbreaker.HalfOpen })
+	probe.Success()
+	eventually(t, "the reader is closed", func() bool { return reader.State() == circuitbreaker.Closed })
+	if s := reader.Stats(); s.Notifications != 3 || s.SubscribeFailed || s.Mode != circuitbreaker.Distributed || s.Failures != 0 {
+		t.Fatalf("stats of the reader = %+v, want 3 notifications in distributed mode and no call", s)
+	}
+}
+
 func TestNotificationPropagation(t *testing.T) {
 	servers := map[string]func(*testing.T) redis.UniversalClient{
 		"standalone Redis": func(t *testing.T) redis.UniversalClient { return reachable(t, standalone()) },
@@ -240,22 +260,7 @@ func TestNotificationPropagation(t *testing.T) {
 			store := newNotifyingStore(t, client, client)
 			writer, reader := newNotifiedBreaker(t, store), newNotifiedBreaker(t, store)
 			waitForSubscribers(t, client, store, 2)
-			for range 5 {
-				_ = call(writer, errDependency)
-			}
-			eventually(t, "the reader is open", func() bool { return reader.State() == circuitbreaker.Open })
-			var probe circuitbreaker.Permit
-			eventually(t, "the writer gets the probe", func() bool {
-				var err error
-				probe, err = writer.Allow(context.Background())
-				return err == nil
-			})
-			eventually(t, "the reader is half-open", func() bool { return reader.State() == circuitbreaker.HalfOpen })
-			probe.Success()
-			eventually(t, "the reader is closed", func() bool { return reader.State() == circuitbreaker.Closed })
-			if s := reader.Stats(); s.Notifications != 3 || s.SubscribeFailed || s.Mode != circuitbreaker.Distributed || s.Failures != 0 {
-				t.Fatalf("stats of the reader = %+v, want 3 notifications in distributed mode and no call", s)
-			}
+			observeEachTransition(t, writer, reader)
 		})
 	}
 

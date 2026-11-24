@@ -8,6 +8,30 @@ services:
     command: ["redis-server", "--cluster-enabled", "yes"]
     ports:
       - "6398:6379"
+  redis-cluster-nodes:
+    image: redis:7-alpine
+    init: true
+    command:
+      - sh
+      - -c
+      - |
+        node() {
+          redis-server --port "$$1" --cluster-enabled yes --cluster-announce-ip 127.0.0.1 --cluster-config-file "nodes-$$1.conf" --save "" --daemonize "$$2"
+        }
+        node 6391 yes
+        node 6392 yes
+        (
+          until redis-cli -p 6393 ping; do sleep 0.1; done
+          redis-cli --cluster create 127.0.0.1:6391 127.0.0.1:6392 127.0.0.1:6393 --cluster-yes
+        ) &
+        node 6393 no
+    ports:
+      - "6391-6393:6391-6393"
+    healthcheck:
+      test: ["CMD-SHELL", "for port in 6391 6392 6393; do redis-cli -p $$port cluster info | grep -q cluster_state:ok || exit 1; done"]
+      interval: 1s
+      timeout: 3s
+      retries: 60
   postgres:
     image: postgres:17-alpine
     environment:
