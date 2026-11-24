@@ -367,7 +367,42 @@ func TestTraced(t *testing.T) {
 	})
 }
 
+type notifying struct {
+	down
+	subscribed []string
+}
+
+func (n *notifying) Subscribe(_ context.Context, name string, changed func()) (func(), error) {
+	n.subscribed = append(n.subscribed, name)
+	changed()
+	return func() {}, nil
+}
+
 func TestInstrumentStore(t *testing.T) {
+	t.Run("DS-10 an instrumented store passes the subscription to a store with notifications", func(t *testing.T) {
+		meter := sdkmetric.NewMeterProvider().Meter("test")
+		inner := &notifying{}
+		store, err := InstrumentStore(inner, meter)
+		if err != nil {
+			t.Fatal(err)
+		}
+		notifier, ok := store.(circuitbreaker.Notifier)
+		if !ok {
+			t.Fatal("the instrumented store has no Subscribe method")
+		}
+		notifications := 0
+		if _, err := notifier.Subscribe(context.Background(), "a", func() { notifications++ }); err != nil || notifications != 1 || !slices.Equal(inner.subscribed, []string{"a"}) {
+			t.Fatalf("Subscribe() = %v with %d notifications and subscriptions %v, want nil, 1, [a]", err, notifications, inner.subscribed)
+		}
+		plain, err := InstrumentStore(down{}, meter)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := plain.(circuitbreaker.Notifier); ok {
+			t.Fatal("the instrumented store of a store without notifications has a Subscribe method")
+		}
+	})
+
 	t.Run("OB-1 the store histogram counts each operation with its result", func(t *testing.T) {
 		reader := sdkmetric.NewManualReader()
 		meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
