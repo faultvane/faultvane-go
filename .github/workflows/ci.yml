@@ -62,6 +62,8 @@ jobs:
         with:
           go-version: stable
       - name: Test each adapter against a real store
+        env:
+          KEEP_STORES: "1"
         run: sh scripts/test-stores.sh
       - name: Test the OpenTelemetry module
         working-directory: otel
