@@ -225,6 +225,22 @@ What the results show:
 - A runner is a shared virtual machine. The values change between runs. They do not replace a measurement on the servers of an application.
 - The store operations and the system benchmark have no result from Linux in this document.
 
+## Propagation of a transition
+
+| Item | Value |
+|---|---|
+| Date | 2026-11-24 |
+| Machine | Apple M4, 10 cores, macOS, Redis 7.4 in a local container |
+| Options | Sync interval 500 ms, early report interval 50 ms, one reader |
+| Method | A temporary test measured 40 transitions for each row, two times. The table gives the less favorable run. The test is not in the repository. |
+
+| Configuration | Median | 90th percentile | Maximum |
+|---|---|---|---|
+| Redis adapter with `WithNotifications` | 0.9 ms | 1.2 ms | 43 ms |
+| Without notifications | 300 ms | 470 ms | 490 ms |
+
+The maximum with notifications occurs when the instance synchronized less than one early report interval before the notification.
+
 ## Long run: memory and goroutines
 
 | Item | Value |
