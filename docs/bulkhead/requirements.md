@@ -79,3 +79,10 @@ A slow dependency can use only its own slots.
 | BH-17 | All methods are safe for concurrent use. |
 | BH-18 | The bulkhead starts no goroutine. |
 | BH-19 | A call that finds a free slot makes no memory allocation in the bulkhead. A rejection makes no memory allocation. |
+
+## 5. Statistics
+
+| ID | Requirement |
+|---|---|
+| BH-23 | `Stats` returns the number of permitted calls, the number of rejected calls, the number of calls that got a waiting place, the number of calls in progress, and the number of waiting callers. A call whose context ends before it gets a slot is not permitted and not rejected. To count makes no memory allocation. |
+| BH-24 | The OpenTelemetry module exports the values of `Stats` as metrics. The attributes are the name that the application gives to the bulkhead and the result of the decision. |

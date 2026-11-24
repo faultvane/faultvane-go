@@ -88,3 +88,10 @@ A retry policy must help with short failures and must not multiply traffic durin
 |---|---|
 | RT-19 | A request with a successful first attempt makes no allocation in the policy and uses no lock. The decisions of the policy after a failed attempt make no allocation. |
 | RT-20 | The memory of a policy instance has a fixed size. It does not grow with the number of calls. |
+
+### Statistics
+
+| ID | Requirement |
+|---|---|
+| RT-21 | `Stats` returns the number of calls, the number of retries, the number of calls that returned an error, the number of stops by the gate, and the number of stops by an empty budget. To count makes no memory allocation and uses no lock. |
+| RT-22 | The OpenTelemetry module exports the values of `Stats` as metrics. The only attribute is the name that the application gives to the policy. |

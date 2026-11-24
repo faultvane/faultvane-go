@@ -60,5 +60,12 @@ The timeout policy gives each call a time limit.
 
 | ID | Requirement |
 |---|---|
-| TO-14 | All methods are safe for concurrent use. A policy instance has no state that changes. |
+| TO-14 | All methods are safe for concurrent use. The only state of a policy instance that changes is the counters of TO-16. |
 | TO-15 | A call makes 4 allocations or fewer in the policy. The allocations are for the context of the call. The policy uses no lock. |
+
+### Statistics
+
+| ID | Requirement |
+|---|---|
+| TO-16 | `Stats` returns the number of calls and the number of timeouts of the policy instance. A call that the caller cancels is not a timeout. To count makes no memory allocation and uses no lock. |
+| TO-17 | The OpenTelemetry module exports the values of `Stats` as metrics. The only attribute is the name that the application gives to the policy. |

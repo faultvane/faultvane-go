@@ -69,7 +69,14 @@ The overload is local, so the policy has no shared state.
 |---|---|
 | LS-20 | An admitted call and a rejected call make no memory allocation in the shedder. To read the priority of a context makes no memory allocation. |
 
-## 8. Out of scope
+## 8. Statistics
+
+| ID | Requirement |
+|---|---|
+| LS-21 | `Stats` returns the number of admitted calls and the number of rejected calls for each priority, and the number of calls in progress. To count makes no memory allocation and uses no lock. |
+| LS-22 | The OpenTelemetry module exports the values of `Stats` as metrics. The attributes are the name that the application gives to the shedder, the result of the decision, and the priority. |
+
+## 9. Out of scope
 
 - A load measure from CPU use, memory use, latency, or queue length.
 - A queue for rejected work.

@@ -80,3 +80,10 @@ This rule has the name AIMD: additive increase, multiplicative decrease.
 | CL-17 | All methods are safe for concurrent use. Concurrent callers never get more calls in progress than the limit. No change of the limit is lost. |
 | CL-22 | The limiter starts no goroutine. |
 | CL-23 | A call makes no memory allocation in the limiter. A rejection makes no memory allocation. |
+
+## 5. Statistics
+
+| ID | Requirement |
+|---|---|
+| CL-24 | `Stats` returns the number of permitted calls, the number of rejected calls, the number of overload signals as decreases of the limit, the effective limit, and the number of calls in progress. To count makes no memory allocation and uses no lock. |
+| CL-25 | The OpenTelemetry module exports the values of `Stats` as metrics. The attributes are the name that the application gives to the limiter and the result of the decision. |
