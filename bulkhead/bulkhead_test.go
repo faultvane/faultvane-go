@@ -120,7 +120,7 @@ func (d *dependency) assertIdle() {
 	}
 }
 
-func rejectedWhileFull(b *Bulkhead, ctx context.Context) (err error, calls int) {
+func rejectedWhileFull(ctx context.Context, b *Bulkhead) (calls int, err error) {
 	_ = b.Do(context.Background(), func(context.Context) error {
 		err = b.Do(ctx, func(context.Context) error {
 			calls++
@@ -128,7 +128,7 @@ func rejectedWhileFull(b *Bulkhead, ctx context.Context) (err error, calls int) 
 		})
 		return nil
 	})
-	return err, calls
+	return calls, err
 }
 
 func TestCalls(t *testing.T) {
@@ -168,7 +168,7 @@ func TestCalls(t *testing.T) {
 func TestLimit(t *testing.T) {
 	t.Run("BH-2 BH-3 a call above the limit is rejected and does not run", func(t *testing.T) {
 		b := newBulkhead(t, WithMaxConcurrent(1))
-		if err, calls := rejectedWhileFull(b, context.Background()); err != ErrFull || calls != 0 {
+		if calls, err := rejectedWhileFull(context.Background(), b); err != ErrFull || calls != 0 {
 			t.Fatalf("Do() = %v with %d calls, want ErrFull with 0 calls", err, calls)
 		}
 		assertCounts(t, b, 0, 0)
@@ -340,7 +340,7 @@ func TestContext(t *testing.T) {
 		b := newBulkhead(t, WithMaxConcurrent(1), WithMaxWaiting(1))
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		if err, calls := rejectedWhileFull(b, ctx); err != context.Canceled || calls != 0 {
+		if calls, err := rejectedWhileFull(ctx, b); err != context.Canceled || calls != 0 {
 			t.Fatalf("Do() = %v with %d calls, want context.Canceled with 0 calls", err, calls)
 		}
 	})
@@ -476,7 +476,7 @@ func TestResources(t *testing.T) {
 	t.Run("BH-18 TK-15 a bulkhead starts no goroutine", func(t *testing.T) {
 		before := runtime.NumGoroutine()
 		b := newBulkhead(t, WithMaxConcurrent(1), WithMaxWaiting(1), WithMaxWait(time.Nanosecond))
-		if err, _ := rejectedWhileFull(b, context.Background()); err != ErrFull {
+		if _, err := rejectedWhileFull(context.Background(), b); err != ErrFull {
 			t.Fatalf("Do() = %v, want ErrFull", err)
 		}
 		if after := runtime.NumGoroutine(); after > before {
