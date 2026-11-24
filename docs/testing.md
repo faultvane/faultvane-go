@@ -105,7 +105,7 @@ Result on 2026-11-24:
 
 | Package | Mutants | Killed | Score |
 |---|---|---|---|
-| `circuitbreaker` | 178 | 171 | 96.1% |
+| `circuitbreaker` | 178 | 175 | 98.3% |
 | `timeout` | 6 | 6 | 100% |
 | `retry` | 26 | 26 | 100% |
 | `bulkhead` | 11 | 11 | 100% |
@@ -113,7 +113,7 @@ Result on 2026-11-24:
 | `loadshed` | 15 | 15 | 100% |
 | `ratelimit` | 48 | 47 | 97.9% |
 
-The 7 mutants that survive in `circuitbreaker` are in `sync.go`: 4 in the condition that decides if a snapshot replaces the local view, and 3 in the delay calculation of the synchronizer loop.
+The 3 mutants that survive in `circuitbreaker` are in the delay calculation of the synchronizer loop in `sync.go`.
 The mutant that survives in `ratelimit` has no effect on the behavior: a full bucket gives the same result with `>=` and with `>`.
 
 Requirement QA-9 is satisfied for the seven policy packages.
