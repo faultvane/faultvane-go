@@ -6,7 +6,7 @@ With a shared store, all instances of a service share one circuit.
 
 Status: implemented. The local breaker, the shared state through a store, local mode, reconciliation, and observability exist and have tests.
 The configuration fingerprint reports instances that have different configurations for one breaker.
-Not implemented: the optional transition notifications. No release tag exists yet.
+The optional transition notifications exist for the Redis adapter. [Architecture](architecture.md) describes them. No release tag exists yet.
 
 | Document | Content |
 |---|---|

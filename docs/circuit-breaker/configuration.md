@@ -69,7 +69,7 @@ These options apply to a breaker with a store. They are the same for each adapte
 |---|---|---|
 | `WithStoreTimeout(d)` | `100ms` | The time limit of each store operation. |
 | `WithSyncInterval(d)` | `500ms` | The interval of reports and snapshot refreshes. |
-| `WithEarlyReportInterval(d)` | `50ms` | The minimum time between two synchronizations when a failure causes an early report. |
+| `WithEarlyReportInterval(d)` | `50ms` | The minimum time between two synchronizations when a failure causes an early report or when a transition notification arrives. |
 | `WithFaultThreshold(faults)` | `3` | The number of store faults in sequence that starts local mode. |
 | `WithStartTimeout(d)` | `1s` | The time limit of the first read in `New`. |
 | `WithStateTTL(d)` | `1h` | The time after which the store can remove the data of a breaker without traffic. See the effective value below. |

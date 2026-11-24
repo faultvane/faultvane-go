@@ -24,6 +24,7 @@ A health check is a read of the authoritative state.
 With the default sync interval of 500 ms, the limit starts at 250 ms and has a maximum of 5 seconds.
 
 Only the synchronizer goroutine sends health checks.
+A transition notification does not cause a health check. An instance in local mode ignores notifications.
 The request path does not request a probe from the store in local mode, and it does not wait for the store.
 
 The results are:
@@ -167,7 +168,7 @@ A local `CLOSED` state does not close it.
 
 | Mode | Guarantee |
 |---|---|
-| Distributed mode | One authoritative state. All transitions have a total order. Each instance observes a transition at most one sync interval later. The probe limit applies to all instances together. |
+| Distributed mode | One authoritative state. All transitions have a total order. Each instance observes a transition at most one sync interval later, or earlier with transition notifications. The probe limit applies to all instances together. |
 | Local mode | Each instance has its own state. States can be different. Each instance still protects the dependency with its local breaker. The probe limit applies to each instance separately. |
 | Reconciliation | All instances converge to the authoritative state. A local state never overwrites it. |
 
