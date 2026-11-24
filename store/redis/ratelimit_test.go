@@ -120,6 +120,22 @@ func TestRateLimitStore(t *testing.T) {
 		}
 	})
 
+	t.Run("RL-37 a time of Redis that goes back gives no tokens and no earlier store time", func(t *testing.T) {
+		store := rateLimitStore(t, client)
+		drained := rateLimitAcquire(t, store, ratelimit.Acquire{Wanted: 10, Rate: 1000, Burst: 10, StateTTL: time.Hour})
+		later := drained.StoreTime.Add(time.Hour)
+		if err := client.HSet(ctx, store.key(rateLimitName), "ts", later.UnixMicro()).Err(); err != nil {
+			t.Fatal(err)
+		}
+		grant := rateLimitAcquire(t, store, ratelimit.Acquire{Wanted: 10, Rate: 1000, Burst: 10, StateTTL: time.Hour})
+		if grant.Tokens != 0 || !grant.StoreTime.Equal(later) {
+			t.Fatalf("grant = %+v, want no tokens at %v", grant, later)
+		}
+		if got := client.HGetAll(ctx, store.key(rateLimitName)).Val(); got["tk"] != "0" || got["ts"] != fmt.Sprint(later.UnixMicro()) {
+			t.Fatalf("hash = %v, want no tokens at %d", got, later.UnixMicro())
+		}
+	})
+
 	t.Run("RL-37 token numbers above 1e14 keep all digits", func(t *testing.T) {
 		store := rateLimitStore(t, client)
 		grant := rateLimitAcquire(t, store, ratelimit.Acquire{Wanted: 3_000_000_000_000_001, Rate: 1e-9, Burst: 4_000_000_000_000_003, StateTTL: time.Hour})
