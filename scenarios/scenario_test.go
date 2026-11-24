@@ -312,7 +312,7 @@ func TestScenarios(t *testing.T) {
 
 		t.Run("GEN-1 GEN-3 ten pods that report failures at the same time open the circuit one time with "+store, func(t *testing.T) {
 			c.t = t
-			c.mode(http.StatusServiceUnavailable, 0)
+			c.mode(http.StatusServiceUnavailable, 20)
 			c.setup(breaker(store, nil))
 			ok, _, _ := total(c.loadAll(map[string]any{"calls": 300, "concurrency": 10}))
 			eventually(t, "all pods are open", c.all("open", "distributed"))
