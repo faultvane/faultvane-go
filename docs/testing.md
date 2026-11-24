@@ -230,7 +230,7 @@ The tests of each adapter also contain: the connection stops and starts again, w
 Only the tests of the Redis adapter also contain:
 
 - A slow store delays no call.
-- One Redis server with cluster mode on: all keys of one breaker are in one slot.
+- One Redis server with cluster mode on: all keys of one breaker are in one slot. The key of the rate limit store for the same name is in that slot also, and the rate limit conformance suite passes with a cluster client.
 
 [Stores](stores/README.md) has a table of the acceptance tests for each adapter.
 
@@ -254,6 +254,7 @@ Not tested: a restart of a real store container, a failover of Redis Sentinel or
 ## 9. Scenarios in Docker
 
 The scenarios run 10 pod containers, a controllable dependency, and four real stores.
+Two scenarios check the shared rate limit with the Redis store: the bound under heavy load, and local mode during a Redis outage.
 They test each policy with separate processes and a real network, and they stop and start store containers.
 [Scenarios in Docker](scenarios.md) lists each scenario and its expected result.
 
