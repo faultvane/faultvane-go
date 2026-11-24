@@ -106,13 +106,13 @@ Result on 2026-11-24:
 
 | Package | Mutants | Killed | Score |
 |---|---|---|---|
-| `circuitbreaker` | 178 | 175 | 98.3% |
+| `circuitbreaker` | 190 | 187 | 98.4% |
 | `timeout` | 6 | 6 | 100% |
 | `retry` | 26 | 26 | 100% |
 | `bulkhead` | 11 | 11 | 100% |
-| `concurrencylimit` | 23 | 23 | 100% |
+| `concurrencylimit` | 34 | 34 | 100% |
 | `loadshed` | 15 | 15 | 100% |
-| `ratelimit` | 48 | 47 | 97.9% |
+| `ratelimit` | 60 | 59 | 98.3% |
 
 The 3 mutants that survive in `circuitbreaker` are in the delay calculation of the synchronizer loop in `sync.go`.
 The mutant that survives in `ratelimit` has no effect on the behavior: a full bucket gives the same result with `>=` and with `>`.
@@ -270,7 +270,7 @@ Each requirement and each acceptance test has an identifier, for example `GEN-3`
 
 - The name of an acceptance test contains its identifier, for example `TestAT5_StaleWriterIsRejected`.
 - A test that proves a requirement names the identifier in a subtest name or in the test table.
-- The script `scripts/traceability.sh` runs in continuous integration. It reads `scripts/implemented-requirements.txt`, the list of the requirements that the completed milestones implement. The list has 282 identifiers. It fails when an identifier of the list has no test, or when a test names an identifier that the requirements documents do not define.
+- The script `scripts/traceability.sh` runs in continuous integration. It reads `scripts/implemented-requirements.txt`, the list of the requirements that the completed milestones implement. The list has 288 identifiers. It fails when an identifier of the list has no test, or when a test names an identifier that the requirements documents do not define.
 - A requirement about the documentation or about the process, for example TK-4 or QA-3, has no test in the code. A review checks it.
 
 ## 10. Benchmarks

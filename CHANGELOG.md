@@ -14,6 +14,7 @@ No release exists yet. This section lists what the repository contains.
 - Statistics for the rate limiter: `Stats` and `RegisterRateLimitMetrics` in the `otel` module.
 - Statistics for the timeout, retry, bulkhead, concurrency limiter, and load shedding policies: a `Stats` method in each package, and the functions `RegisterTimeoutMetrics`, `RegisterRetryMetrics`, `RegisterBulkheadMetrics`, `RegisterConcurrencyLimitMetrics`, and `RegisterLoadShedMetrics` in the `otel` module.
 - Acceptance tests AT-3 to AT-6 for the SQL adapter and the MongoDB adapter against real stores.
+- Optional transition notifications: the interface `circuitbreaker.Notifier`, the statistics `Notifications` and `SubscribeFailed`, and the option `redisstore.WithNotifications`. With the option, an instance observes a transition of a different instance in about 1 ms.
 - Tests of the shared rate limit with a Redis cluster client, and two Docker scenarios with 10 pods for it.
 - Configuration fingerprint of the circuit breaker: an instance detects that the last writer of the shared state has a different configuration. New: `Breaker.ConfigFingerprint`, `Stats.ConfigMismatch`, the event kind `ConfigMismatchChanged`, the metric `faultvane.circuit_breaker.config_mismatch`, the field `Fingerprint` in the store types, and `Record.Apply`.
 - Events and logs for the rate limiter with a store (mode changes and store faults) and for the concurrency limiter (limit changes): `WithObserver`, `WithLogger`, `Observer`, `Event`, and `EventKind` in each of the two packages.
@@ -64,5 +65,4 @@ Documents:
 ### Not included
 
 - A release tag.
-- Logs and an observer for the policies other than the circuit breaker.
-- The transition notifications of the first design.
+- Logs and an observer for the timeout, retry, bulkhead, and load shedding policies. These policies have no state changes and no faults.
