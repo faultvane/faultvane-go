@@ -1,6 +1,6 @@
 # ADR 0003: Redis server time for all shared timestamps
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 

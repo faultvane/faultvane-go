@@ -1,6 +1,6 @@
 # ADR 0005: One repository with a dependency-free core module
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 

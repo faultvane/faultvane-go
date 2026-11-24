@@ -6,11 +6,11 @@ It also gives the conditions under which the team must examine the decision agai
 
 | Number | Decision | Status |
 |---|---|---|
-| [0001](0001-local-decision-shared-aggregation.md) | Local decisions with batched shared aggregation | Proposed |
-| [0002](0002-lua-scripts-and-generation.md) | Atomic transitions in Lua scripts with a generation | Proposed |
-| [0003](0003-redis-server-time.md) | Redis server time for all shared timestamps | Proposed |
-| [0004](0004-local-breaker-fallback.md) | Local breaker as the fallback | Proposed |
-| [0005](0005-module-layout.md) | One repository with a dependency-free core module | Proposed |
+| [0001](0001-local-decision-shared-aggregation.md) | Local decisions with batched shared aggregation | Accepted |
+| [0002](0002-lua-scripts-and-generation.md) | Atomic transitions in Lua scripts with a generation | Accepted |
+| [0003](0003-redis-server-time.md) | Redis server time for all shared timestamps | Accepted |
+| [0004](0004-local-breaker-fallback.md) | Local breaker as the fallback | Accepted |
+| [0005](0005-module-layout.md) | One repository with a dependency-free core module | Accepted |
 
 ## Add a record
 

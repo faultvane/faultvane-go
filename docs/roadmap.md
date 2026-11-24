@@ -24,7 +24,7 @@ flowchart LR
 
 | Milestone | Result | Status |
 |---|---|---|
-| M0 | Repository, requirements, design, plan | In progress |
+| M0 | Repository, requirements, design, plan | Done |
 | M1 | A correct local circuit breaker with the public API | Planned |
 | M2 | Shared state and shared failure detection through Redis | Planned |
 | M3 | Probes coordinated across instances | Planned |
@@ -51,7 +51,7 @@ Scope:
 Exit criteria:
 
 - [x] The documents exist and agree with each other.
-- [ ] The owner approved the open decisions in section 5.
+- [x] The owner approved the decisions in section 5.
 - [x] The repository has a license.
 - [x] Continuous integration runs build, `go vet`, static analysis, and tests on each change.
 
@@ -225,11 +225,11 @@ Requirements: PI-1 to PI-3.
 - [ ] Each critical race has an automated test.
 - [ ] The documentation describes the consistency model and the failure model.
 
-## 5. Open decisions
+## 5. Confirmed decisions
 
-The owner of the project must confirm these decisions before M1 starts.
+The owner of the project confirmed these decisions on 2026-11-24.
 
-| Topic | Proposal | Effect of a change |
+| Topic | Decision | Effect of a change |
 |---|---|---|
 | Module path | `github.com/faultvane/faultvane-go` | Cheap before the first release. Expensive after it. |
 | Minimum Go version | 1.24 | Sets the language features that the code can use. |
