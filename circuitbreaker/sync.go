@@ -288,6 +288,14 @@ func (b *Breaker) wait(d time.Duration) bool {
 	}
 }
 
+func earlyReportWait(interval, sinceLastReport time.Duration) time.Duration {
+	return interval - sinceLastReport
+}
+
+func healthCheckDelay(limit time.Duration) time.Duration {
+	return limit/2 + rand.N(limit/2+1)
+}
+
 func (b *Breaker) run() {
 	defer close(b.done)
 	unsubscribe := b.subscribe()
@@ -303,14 +311,14 @@ func (b *Breaker) run() {
 		case <-timer.C:
 		case <-b.wake:
 			timer.Stop()
-			if !b.wait(b.cfg.earlyReportInterval - time.Since(last)) {
+			if !b.wait(earlyReportWait(b.cfg.earlyReportInterval, time.Since(last))) {
 				return
 			}
 		}
 		b.synchronize(context.Background())
 		last = time.Now()
 		if b.current.Load().local {
-			delay = backoff/2 + rand.N(backoff/2+1)
+			delay = healthCheckDelay(backoff)
 			backoff = min(backoff*2, 10*b.cfg.syncInterval)
 		} else {
 			delay, backoff = b.cfg.syncInterval, b.cfg.syncInterval/2
