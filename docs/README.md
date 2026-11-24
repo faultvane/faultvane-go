@@ -22,11 +22,11 @@
 | Retry | `retry` | [Guide](retry/README.md), [requirements](retry/requirements.md) | Implemented |
 | Bulkhead | `bulkhead` | [Guide](bulkhead/README.md), [requirements](bulkhead/requirements.md) | Implemented |
 | Concurrency limiter | `concurrencylimit` | [Guide](concurrencylimit/README.md), [requirements](concurrencylimit/requirements.md) | Implemented |
-| Rate limiter | `ratelimit` | [Guide](ratelimit/README.md), [requirements](ratelimit/requirements.md) | Implemented for one process. A limit that many instances share is not implemented. |
+| Rate limiter | `ratelimit` | [Guide](ratelimit/README.md), [requirements](ratelimit/requirements.md) | Implemented. Instances can share one limit through a store. See the [rate limit store](ratelimit/store.md). |
 | Load shedding | `loadshed` | [Guide](loadshed/README.md), [requirements](loadshed/requirements.md) | Implemented |
 
 Each policy has its own directory with a requirements document and a guide or design documents.
-The circuit breaker has metrics, logs, and an observer. The timeout, retry, bulkhead, concurrency limiter, and load shedding policies have statistics (`Stats`) and OpenTelemetry metrics. They write no logs and have no observer. The rate limiter has no statistics and no metrics yet.
+The circuit breaker has metrics, logs, and an observer. The timeout, retry, bulkhead, concurrency limiter, rate limiter, and load shedding policies have statistics (`Stats`) and OpenTelemetry metrics. They write no logs and have no observer.
 
 ## Shared state
 

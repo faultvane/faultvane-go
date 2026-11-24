@@ -5,6 +5,8 @@ The breaker does not know the type of the store.
 It uses the store through one interface.
 An **adapter** implements the interface for one type of store.
 
+This document is about the stores of the circuit breaker. The rate limiter has a different store interface. See the [rate limit store](../ratelimit/store.md).
+
 ## 1. Adapters
 
 | Adapter | Go package | Module | Status |

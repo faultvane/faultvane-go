@@ -11,7 +11,6 @@ import (
 const rateLimitPrefix = "faultvane.rate_limiter."
 
 var (
-	rateLimitNameKey     = attribute.Key("faultvane.policy.name")
 	rateLimitModeKey     = attribute.Key("faultvane.rate_limiter.mode")
 	rateLimitDecisionKey = attribute.Key("faultvane.rate_limiter.decision")
 	rateLimitModes       = []ratelimit.Mode{ratelimit.Distributed, ratelimit.Local}
@@ -40,7 +39,7 @@ func RegisterRateLimitMetrics(meter metric.Meter, name string, l *ratelimit.Limi
 	if failure != nil {
 		return nil, failure
 	}
-	policy := rateLimitNameKey.String(name)
+	policy := policyNameKey.String(name)
 	return meter.RegisterCallback(func(_ context.Context, observer metric.Observer) error {
 		stats := l.Stats()
 		observer.ObserveInt64(calls, stats.Permitted, metric.WithAttributes(policy, rateLimitDecisionKey.String("permitted")))

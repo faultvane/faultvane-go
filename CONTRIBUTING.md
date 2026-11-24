@@ -99,7 +99,7 @@ A full run takes about 25 minutes. To examine one package, give its directory: `
 - Do not write comments in code. Use clear names and small functions.
 - The core module has no dependencies outside the standard library.
 - Each function that can block accepts a `context.Context`.
-- A store adapter contains no behavior that is not storage. It must pass the conformance suite in `circuitbreaker/storetest`.
+- A store adapter contains no behavior that is not storage. It must pass the conformance suite in `circuitbreaker/storetest`. A store of the rate limiter must pass the conformance suite in `ratelimit/storetest`.
 - An adapter written in Go uses the type `circuitbreaker.Record` for the transitions. It does not copy the transition logic.
 - Each goroutine has an owner that stops it. Tests fail on a goroutine leak.
 - The request path does not allocate memory and does not call the store in the `CLOSED` state.

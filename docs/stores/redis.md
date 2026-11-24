@@ -67,6 +67,8 @@ Rules:
 - The prefix, the namespace, and the name accept only the characters `a-z`, `A-Z`, `0-9`, `.`, `_`, and `-`. The maximum length of each is 64. This rule prevents collisions, because the separator `:` and the braces cannot occur in a name.
 - `cb` identifies the circuit breaker.
 
+The rate limit store of this module uses one more key for each name: `<prefix>:{<namespace>:<name>}:rl:bucket`. See the [rate limit store](../ratelimit/store.md).
+
 ## 3. Units
 
 | Value | Unit |
