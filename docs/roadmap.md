@@ -52,11 +52,11 @@ These criteria apply to each milestone from M1.
 
 | Criterion | Result |
 |---|---|
-| All quality gates of [testing.md](testing.md) section 1 pass. | The active gates pass in continuous integration. The mutation gate and the benchmark comparison are not active. |
+| All quality gates of [testing.md](testing.md) section 1 pass. | The active gates pass in continuous integration. The benchmark comparison is not active. |
 | The statement coverage is 98% or more for each module and 95% or more for each package (QA-1, QA-2). | Continuous integration enforces it for the core module, the three adapter modules, and the `otel` module. |
-| Each requirement that the milestone names has a test with its identifier (QA-5). | 234 of the 251 requirements are in `scripts/implemented-requirements.txt`, and each has a test. The other 17 are requirements about the process, the documentation, or performance targets: QA-1 to QA-7, QA-9 to QA-12, QA-14, SEC-2, TK-4, and TK-51 to TK-53. No test names them. |
+| Each requirement that the milestone names has a test with its identifier (QA-5). | 235 of the 251 requirements are in `scripts/implemented-requirements.txt`, and each has a test. The other 16 are requirements about the process, the documentation, or performance targets: QA-1 to QA-7, QA-10 to QA-12, QA-14, SEC-2, TK-4, and TK-51 to TK-53. No test names them. |
 | Each scenario that the design documents of the milestone describe has a test. | Not verified for each scenario. The tests of each milestone exist. |
-| The mutation score of the critical packages that the milestone changes is 90% or more (QA-9). | Measured by hand for M1 only. No mutation run is recorded for the later milestones. |
+| The mutation score of the critical packages that the milestone changes is 90% or more (QA-9). | The mutation gate measures it each day for the seven policy packages. [Testing](testing.md) section 2 records the result. |
 
 ## 2. Milestones for the circuit breaker
 
@@ -97,7 +97,7 @@ Result on 2026-11-24:
 - [x] The core module has no dependencies. The test `TestDependencies` checks it.
 - [x] The property test and the fuzz target check the six invariants of the state machine.
 - [x] A manual mutation run changed 43 conditions and values in the code. The tests failed for 42. The last change has no effect on the behavior.
-- [ ] Open: the automated mutation gate. See section 5.
+- [x] The automated mutation gate is active. See [testing](testing.md) section 2.
 
 Differences from the plan:
 
@@ -320,7 +320,7 @@ Result:
 | Item | Detail |
 |---|---|
 | No release tag | No module has a version tag. Each separate module uses a `replace` directive to the core in the same repository, and requires the core with the version `v0.0.0`. A release needs a tag for each module and a real version in each `go.mod`. The release is the decision of the owner. |
-| Mutation gate | The automated mutation gate is not active. The maintainers run mutations by hand. Only the run of M1 is recorded. |
+| Mutants that survive | 7 mutants survive in `circuitbreaker/sync.go`. No test proves the condition that decides if a snapshot replaces the local view, and no test proves the delay calculation of the synchronizer loop. The mutation gate does not apply to `circuitbreaker/storetest` (score 63.2%), to the store adapters, or to the `otel` module. |
 | Observability of the other policies | The timeout, retry, bulkhead, concurrency limiter, rate limiter, and load shedding policies have no metrics, no logs, and no observer. Only the circuit breaker satisfies the toolkit requirements TK-40 to TK-42. |
 | Configuration fingerprint | Not implemented. The library does not detect different configurations between instances. |
 | Transition notifications | Not implemented. The Redis adapter does not use Pub/Sub. The sync interval gives the propagation. |
@@ -349,7 +349,7 @@ Result:
 - [x] The circuit breaker has metrics, logs, and events for its state, its mode, and its store faults.
 - [ ] Benchmarks show that the cost is acceptable. The results exist for one machine only.
 - [x] Each critical race has an automated test with the race detector.
-- [ ] The coverage is 98% or more, and each requirement has a test (QA-1 to QA-14). The coverage gate is active. The mutation part of QA-9 and the release gate QA-14 are not satisfied.
+- [ ] The coverage is 98% or more, and each requirement has a test (QA-1 to QA-14). The coverage gate and the mutation gate are active. The release gate QA-14 is not satisfied.
 - [x] The documentation describes the consistency model and the failure model.
 
 ## 7. Confirmed decisions
@@ -376,7 +376,7 @@ The row for the transition logic and the Go versions of the separate modules com
 | Different configurations between instances. | The failure condition depends on the reporter. | None in the code. The configuration fingerprint is not implemented. The documentation tells the application to use one configuration. |
 | An adapter contains a second implementation of the transitions. | Adapters behave differently. | The in-memory, SQL, and MongoDB adapters share the type `Record`. Only the Redis scripts are a second implementation. The conformance suite compares each adapter with the in-memory store. See [ADR 0007](adr/0007-shared-record-for-go-adapters.md). |
 | Tests with real time are not stable. | Slow or flaky continuous integration. | Fake clock in unit tests. Wait for conditions in integration tests. |
-| The coverage minimum of 98% causes tests without value. | High coverage with weak assertions. | Property tests and the traceability check measure the quality of the assertions. The automated mutation gate is not active. |
+| The coverage minimum of 98% causes tests without value. | High coverage with weak assertions. | Property tests, the traceability check, and the mutation gate measure the quality of the assertions. |
 | The coverage minimum slows the delivery. | Milestones take longer. | Accepted. Test-driven development keeps the coverage high from the first commit of each milestone. |
 | The scope of seven policies is large. | The first release is late. | This risk occurred in a different form: all seven policies are implemented, and no release exists yet. |
 | The policy interface is fixed with only one policy. | A later policy does not fit the interface. | Closed. All seven policies implement the interface. The API can change until version 1.0. |

@@ -25,6 +25,7 @@ The repository contains six Go modules. Each has its own `go.mod` file.
 | MongoDB adapter | `store/mongodb` | Package `mongostore` |
 | OpenTelemetry | `otel` | Package `faultvaneotel` |
 | Examples | `examples` | The programs `pipeline` and `shared` |
+| Tools | `tools` | The program `mutation` for the mutation gate |
 
 Each separate module has a `replace` directive that points to the core in the repository.
 A `go` command in the repository root applies only to the core module. Run the command in the directory of a different module to build or test that module.
@@ -82,6 +83,15 @@ sh scripts/scenarios.sh
 
 This command needs Docker. It starts 10 pods, a dependency, and four stores, and runs each scenario of `docs/scenarios.md`.
 Run it when you change the behavior of a policy or of a store adapter.
+
+## Mutation tests
+
+```sh
+sh scripts/mutation.sh
+```
+
+This command changes one operator of the code at a time and runs the tests of the package. It fails when the mutation score of a policy package is below 90%.
+A full run takes about 25 minutes. To examine one package, give its directory: `sh scripts/mutation.sh retry`.
 
 ## Rules for code
 
