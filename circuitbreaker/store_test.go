@@ -2,7 +2,10 @@ package circuitbreaker
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -228,6 +231,150 @@ func TestMemoryStore(t *testing.T) {
 		}
 		if snapshot, _ := store.Load(context.Background(), "a"); snapshot.Generation != 0 {
 			t.Fatalf("Load() = %+v", snapshot)
+		}
+	})
+}
+
+func TestRecordFingerprint(t *testing.T) {
+	at := testStart.Add(testOpenDuration)
+	report := func(generation uint64, failures int64, fingerprint string) Report {
+		r := testReport(generation, failures, failures, 0)
+		r.Fingerprint = fingerprint
+		return r
+	}
+	request := func(token uint64, fingerprint string) ProbeRequest {
+		return ProbeRequest{Token: token, Limit: 1, LeaseDuration: testLease, Fingerprint: fingerprint}
+	}
+	result := func(generation, token uint64, outcome Result, fingerprint string) ProbeResult {
+		return ProbeResult{Generation: generation, Token: token, Result: outcome, SuccessThreshold: 1, OpenDuration: testOpenDuration, Fingerprint: fingerprint}
+	}
+	open := Record{}.Report(testStart, report(0, 5, "a"))
+	halfOpen, _ := open.AcquireProbe(at, request(1, "a"))
+
+	t.Run("DS-9 a report saves the fingerprint of its sender and the last sender wins", func(t *testing.T) {
+		r := Record{}.Report(testStart, report(0, 1, "a"))
+		if r.Fingerprint != "a" {
+			t.Fatalf("fingerprint = %q, want a", r.Fingerprint)
+		}
+		if r = r.Report(testStart, report(0, 1, "b")); r.Fingerprint != "b" {
+			t.Fatalf("fingerprint = %q, want b", r.Fingerprint)
+		}
+		if r = r.Report(testStart, report(0, 1, "")); r.Fingerprint != "" {
+			t.Fatalf("fingerprint = %q, want an empty fingerprint from a sender without one", r.Fingerprint)
+		}
+	})
+
+	t.Run("DS-9 a transition keeps the fingerprint", func(t *testing.T) {
+		if open.State != Open || open.Fingerprint != "a" {
+			t.Fatalf("after T1: %+v, want open with fingerprint a", open)
+		}
+		if halfOpen.State != HalfOpen || halfOpen.Fingerprint != "a" {
+			t.Fatalf("after T2: %+v, want half_open with fingerprint a", halfOpen)
+		}
+		if closed := halfOpen.CompleteProbe(at, result(2, 1, Success, "a")); closed.State != Closed || closed.Fingerprint != "a" {
+			t.Fatalf("after T3: %+v, want closed with fingerprint a", closed)
+		}
+		if again := halfOpen.CompleteProbe(at, result(2, 1, Failure, "a")); again.State != Open || again.Fingerprint != "a" {
+			t.Fatalf("after T4: %+v, want open with fingerprint a", again)
+		}
+	})
+
+	t.Run("DS-9 a report that the record ignores does not change the fingerprint", func(t *testing.T) {
+		closed := Record{}.Report(testStart, report(0, 1, "a"))
+		assertUnchanged(t, closed, closed.Report(testStart, report(1, 1, "b")))
+		assertUnchanged(t, open, open.Report(testStart, report(1, 1, "b")))
+	})
+
+	t.Run("DS-9 a probe request saves the fingerprint only when the result is half-open", func(t *testing.T) {
+		closed := Record{Fingerprint: "a"}
+		kept, _ := closed.AcquireProbe(at, request(1, "b"))
+		assertUnchanged(t, closed, kept)
+		early, _ := open.AcquireProbe(at.Add(-time.Nanosecond), request(1, "b"))
+		assertUnchanged(t, open, early)
+		first, granted := open.AcquireProbe(at, request(1, "b"))
+		if !granted || first.Fingerprint != "b" {
+			t.Fatalf("granted = %v, fingerprint = %q, want true, b", granted, first.Fingerprint)
+		}
+		second, granted := first.AcquireProbe(at, request(2, "c"))
+		if granted || second.Fingerprint != "c" {
+			t.Fatalf("granted = %v, fingerprint = %q, want false, c", granted, second.Fingerprint)
+		}
+	})
+
+	t.Run("DS-9 a probe result saves the fingerprint only with the half-open state and the equal generation", func(t *testing.T) {
+		assertUnchanged(t, open, open.CompleteProbe(at, result(1, 1, Success, "b")))
+		assertUnchanged(t, halfOpen, halfOpen.CompleteProbe(at, result(1, 1, Success, "b")))
+		stale := Record{State: Closed, Generation: 2, Fingerprint: "a"}
+		assertUnchanged(t, stale, stale.CompleteProbe(at, result(2, 1, Success, "b")))
+		if unknown := halfOpen.CompleteProbe(at, result(2, 9, Success, "b")); unknown.State != HalfOpen || unknown.Fingerprint != "b" || len(unknown.Leases) != 1 {
+			t.Fatalf("record = %+v, want half_open with fingerprint b and 1 lease", unknown)
+		}
+		if closed := halfOpen.CompleteProbe(at, result(2, 1, Success, "b")); closed.State != Closed || closed.Fingerprint != "b" {
+			t.Fatalf("record = %+v, want closed with fingerprint b", closed)
+		}
+		if ignored := halfOpen.CompleteProbe(at, result(2, 1, Ignored, "b")); ignored.State != HalfOpen || ignored.Fingerprint != "b" {
+			t.Fatalf("record = %+v, want half_open with fingerprint b", ignored)
+		}
+	})
+
+	t.Run("DS-9 Restore keeps the fingerprint of the record", func(t *testing.T) {
+		current := Record{Generation: 4, Fingerprint: "a", Buckets: []Bucket{{Epoch: 1, Calls: 1}}}
+		lost := Snapshot{State: Open, Generation: 5, TransitionAt: testStart, OpenDuration: testOpenDuration, Fingerprint: "b"}
+		want := Record{State: Open, Generation: 5, TransitionAt: testStart, OpenDuration: testOpenDuration, Fingerprint: "a"}
+		if got := current.Restore(lost); !reflect.DeepEqual(got, want) {
+			t.Fatalf("record = %+v, want %+v", got, want)
+		}
+		lost.Generation = 4
+		assertUnchanged(t, current, current.Restore(lost))
+	})
+
+	t.Run("DS-9 Snapshot contains the fingerprint of the record", func(t *testing.T) {
+		if got := (Record{Fingerprint: "a"}).Snapshot(testStart).Fingerprint; got != "a" {
+			t.Fatalf("fingerprint = %q, want a", got)
+		}
+	})
+
+	t.Run("DS-9 a stored record without the field has no fingerprint and a record with the field keeps it", func(t *testing.T) {
+		var old Record
+		if err := json.Unmarshal([]byte(`{"State":1,"Generation":3,"TransitionAt":"2026-01-01T00:00:00Z","OpenDuration":30000000000,"ProbeSuccesses":0,"Leases":null,"Buckets":null}`), &old); err != nil {
+			t.Fatal(err)
+		}
+		if old.State != Open || old.Generation != 3 || old.Fingerprint != "" {
+			t.Fatalf("record = %+v, want open generation 3 without a fingerprint", old)
+		}
+		encoded, err := json.Marshal(Record{State: Open, Generation: 3, Fingerprint: "a"})
+		if err != nil || !strings.Contains(string(encoded), `"Fingerprint":"a"`) {
+			t.Fatalf("JSON = %s, %v", encoded, err)
+		}
+	})
+}
+
+func TestMemoryStoreFingerprint(t *testing.T) {
+	t.Run("DS-9 each operation returns the fingerprint that the record had before it", func(t *testing.T) {
+		clock := faultvanetest.NewClock(testStart)
+		store := NewMemoryStore(clock)
+		ctx := context.Background()
+		fingerprints := []string{}
+		add := func(snapshot Snapshot, err error) {
+			t.Helper()
+			if err != nil {
+				t.Fatal(err)
+			}
+			fingerprints = append(fingerprints, snapshot.Fingerprint)
+		}
+		report := testReport(0, 5, 5, 0)
+		report.Fingerprint = "a"
+		add(store.Load(ctx, "x"))
+		add(store.Report(ctx, "x", report))
+		add(store.Load(ctx, "x"))
+		clock.Advance(testOpenDuration)
+		grant, err := store.AcquireProbe(ctx, "x", ProbeRequest{Token: 1, Limit: 1, LeaseDuration: testLease, Fingerprint: "b"})
+		add(grant.Snapshot, err)
+		add(store.CompleteProbe(ctx, "x", ProbeResult{Generation: 2, Token: 1, Result: Failure, SuccessThreshold: 1, OpenDuration: testOpenDuration, Fingerprint: "c"}))
+		add(store.Restore(ctx, "x", Snapshot{State: Closed, Generation: 9, Fingerprint: "d"}))
+		add(store.Load(ctx, "x"))
+		if want := []string{"", "", "a", "a", "b", "c", "c"}; !slices.Equal(fingerprints, want) {
+			t.Fatalf("fingerprints = %q, want %q", fingerprints, want)
 		}
 	})
 }

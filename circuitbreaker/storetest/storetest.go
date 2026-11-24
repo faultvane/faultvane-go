@@ -30,6 +30,7 @@ type recorder struct {
 	windowSize   time.Duration
 	limit        int
 	successes    int
+	fingerprint  string
 	problems     []string
 }
 
@@ -62,6 +63,12 @@ func (r *recorder) expect(step string, snapshot circuitbreaker.Snapshot, state c
 	}
 }
 
+func (r *recorder) expectFingerprint(step string, snapshot circuitbreaker.Snapshot, fingerprint string) {
+	if snapshot.Fingerprint != fingerprint {
+		r.problem("%s: fingerprint %q, want %q", step, snapshot.Fingerprint, fingerprint)
+	}
+}
+
 func (r *recorder) expectTrue(step string, ok bool) {
 	if !ok {
 		r.problem("%s", step)
@@ -84,6 +91,7 @@ func (r *recorder) report(generation uint64, calls, failures int64) circuitbreak
 		WindowBuckets: 2,
 		OpenDuration:  r.openDuration,
 		StateTTL:      long,
+		Fingerprint:   r.fingerprint,
 	})
 	r.noError("Report", err)
 	return snapshot
@@ -95,6 +103,7 @@ func (r *recorder) acquire(token uint64) (circuitbreaker.Snapshot, bool) {
 		Limit:         r.limit,
 		LeaseDuration: r.lease,
 		StateTTL:      long,
+		Fingerprint:   r.fingerprint,
 	})
 	r.noError("AcquireProbe", err)
 	return grant.Snapshot, grant.Granted
@@ -108,6 +117,7 @@ func (r *recorder) complete(generation, token uint64, result circuitbreaker.Resu
 		SuccessThreshold: r.successes,
 		OpenDuration:     r.openDuration,
 		StateTTL:         long,
+		Fingerprint:      r.fingerprint,
 	})
 	r.noError("CompleteProbe", err)
 	return snapshot
@@ -117,6 +127,11 @@ func (r *recorder) restore(snapshot circuitbreaker.Snapshot) circuitbreaker.Snap
 	restored, err := r.store.Restore(context.Background(), r.name, snapshot)
 	r.noError("Restore", err)
 	return restored
+}
+
+func (r *recorder) as(fingerprint string) *recorder {
+	r.fingerprint = fingerprint
+	return r
 }
 
 func (r *recorder) open() {
@@ -263,6 +278,46 @@ var checks = []check{
 		r.expect("Restore", r.restore(circuitbreaker.Snapshot{State: circuitbreaker.Closed, Generation: 3, TransitionAt: now}), circuitbreaker.Closed, 3)
 		r.expect("report after restore", r.report(3, threshold-1, threshold-1), circuitbreaker.Closed, 3)
 	}},
+	{"C13 a breaker without state has no fingerprint", func(r *recorder) {
+		r.expectFingerprint("Load", r.load(), "")
+		r.expectFingerprint("first report", r.as("a").report(0, 1, 0), "")
+	}},
+	{"C13 a report saves the fingerprint of the caller and returns the fingerprint before it", func(r *recorder) {
+		r.as("a").report(0, 1, 0)
+		r.expectFingerprint("report of a different caller", r.as("b").report(0, 1, 0), "a")
+		r.expectFingerprint("Load", r.load(), "b")
+		r.expectFingerprint("report of the first caller", r.as("a").report(0, 1, 0), "b")
+		r.expectFingerprint("report that opens the circuit", r.as("c").report(0, threshold, threshold), "a")
+		r.expectFingerprint("Load after the transition", r.load(), "c")
+	}},
+	{"C13 an operation that the store ignores does not change the fingerprint", func(r *recorder) {
+		r.as("a").report(0, 1, 0)
+		r.expectFingerprint("report with a different generation", r.as("b").report(5, 1, 0), "a")
+		_, _ = r.as("b").acquire(1)
+		r.expectFingerprint("Load after a probe request in closed", r.load(), "a")
+		r.as("a").open()
+		r.expectFingerprint("report in open", r.as("b").report(1, 1, 0), "a")
+		_, _ = r.as("b").acquire(1)
+		r.as("b").complete(1, 1, circuitbreaker.Success)
+		r.expectFingerprint("Load after the ignored operations", r.load(), "a")
+	}},
+	{"C13 a probe operation saves the fingerprint of the caller and returns the fingerprint before it", func(r *recorder) {
+		r.as("a").halfOpen()
+		r.expectFingerprint("Load in half-open", r.load(), "a")
+		snapshot, granted := r.as("b").acquire(2)
+		r.expectTrue("the store granted a second probe with limit 1", !granted)
+		r.expectFingerprint("probe request without a grant", snapshot, "a")
+		r.expectFingerprint("probe result with a different generation", r.as("c").complete(1, 1, circuitbreaker.Success), "b")
+		r.expectFingerprint("probe result", r.as("c").complete(2, 1, circuitbreaker.Success), "b")
+		r.expectFingerprint("Load after the probe result", r.load(), "c")
+	}},
+	{"C13 restore does not change the fingerprint", func(r *recorder) {
+		r.as("a").report(0, 1, 0)
+		now := r.load().StoreTime
+		lost := circuitbreaker.Snapshot{State: circuitbreaker.Open, Generation: 7, TransitionAt: now, OpenDuration: long, Fingerprint: "b"}
+		r.expectFingerprint("Restore", r.restore(lost), "a")
+		r.expectFingerprint("Load", r.load(), "a")
+	}},
 	{"C7 two breakers share no data", func(r *recorder) {
 		other := newRecorder(r.store, r.patience)
 		r.open()
@@ -342,6 +397,8 @@ var checks = []check{
 			}
 			token := uint64(0)
 			for step := range 25 {
+				tested.fingerprint = string(rune('a' + random.IntN(3)))
+				reference.fingerprint = tested.fingerprint
 				generation := reference.load().Generation
 				if random.IntN(4) == 0 {
 					generation += uint64(random.IntN(3)) + 1
@@ -366,8 +423,8 @@ var checks = []check{
 					lost.TransitionAt = reference.load().StoreTime
 					want = reference.restore(lost)
 				}
-				if got.State != want.State || got.Generation != want.Generation || gotGranted != wantGranted {
-					r.problem("sequence %d step %d: state %v generation %d granted %v, the reference has %v, %d, %v", sequence, step, got.State, got.Generation, gotGranted, want.State, want.Generation, wantGranted)
+				if got.State != want.State || got.Generation != want.Generation || gotGranted != wantGranted || got.Fingerprint != want.Fingerprint {
+					r.problem("sequence %d step %d: state %v generation %d granted %v fingerprint %q, the reference has %v, %d, %v, %q", sequence, step, got.State, got.Generation, gotGranted, got.Fingerprint, want.State, want.Generation, wantGranted, want.Fingerprint)
 				}
 				time.Sleep(4 * time.Millisecond)
 			}
