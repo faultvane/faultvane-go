@@ -38,6 +38,17 @@ flowchart LR
 | M9 to M11 | The other resilience policies | Planned |
 
 Each milestone delivers working and tested code.
+
+### Exit criteria for each milestone
+
+These criteria apply to each milestone from M1. The lists below do not repeat them.
+
+- All quality gates of [testing.md](testing.md) section 1 pass.
+- The statement coverage is 98% or more for each module and 95% or more for each package (QA-1, QA-2).
+- Each requirement that the milestone names has a test with its identifier (QA-5).
+- Each scenario that the design documents of the milestone describe has a test.
+- The mutation score of the critical packages that the milestone changes is 90% or more (QA-9).
+
 The breaker is usable as a local breaker after M1 and as a distributed breaker after M4.
 
 ## 2. Milestones for the circuit breaker
@@ -57,6 +68,7 @@ Exit criteria:
 - [x] The owner approved the decisions in section 6.
 - [x] The repository has a license.
 - [x] Continuous integration runs build, `go vet`, static analysis, and tests on each change.
+- [x] Continuous integration enforces the coverage minimum of QA-1 and QA-2.
 
 ### M1: Local breaker
 
@@ -68,8 +80,9 @@ Scope:
 - `New`, `Execute`, `Do`, `Allow`, and the permit.
 - Classifier and slow call detection.
 - Configuration options and validation.
+- Test infrastructure: property tests, fuzz targets, mutation tests, the goroutine leak check, and the traceability check as gates in continuous integration.
 
-Requirements: TK-1 to TK-6, TK-10 to TK-21, SM-1 to SM-8, FD-1 to FD-5, API-1 to API-5, ERR-1, ERR-2, CFG-1 to CFG-3, PF-4 to PF-6.
+Requirements: QA-1 to QA-6, QA-9 to QA-13, TK-1 to TK-6, TK-10 to TK-21, SM-1 to SM-8, FD-1 to FD-5, API-1 to API-5, ERR-1, ERR-2, CFG-1 to CFG-3, PF-4 to PF-6.
 
 Exit criteria:
 
@@ -83,7 +96,7 @@ Scope:
 
 - Store interface with the operations `Load`, `Report`, and `Restore`.
 - In-memory adapter.
-- Conformance suite `store/storetest` for these operations.
+- Conformance suite `store/storetest` for these operations, as a gate in continuous integration with a real store (QA-7, QA-8).
 - Synchronizer: reports, early reports, snapshot replacement, clock difference.
 - Generation rules.
 - Redis adapter module: key schema, scripts `report` and `restore`, TTL rules.
@@ -158,7 +171,7 @@ Exit criteria:
 
 Scope:
 
-- Chaos tests.
+- Chaos tests, as a scheduled gate in continuous integration.
 - System benchmarks with 1, 10, 50, and 100 instances.
 - Goroutine leak tests and a long run for memory.
 - Corrections of the defects that these tests find.
@@ -247,6 +260,7 @@ Requirements: PI-1 to PI-3.
 - [ ] Metrics and logs give sufficient information for operation.
 - [ ] Benchmarks show that the cost is acceptable.
 - [ ] Each critical race has an automated test.
+- [ ] The coverage is 98% or more, and each requirement has a test (QA-1 to QA-14).
 - [ ] The documentation describes the consistency model and the failure model.
 
 ## 6. Confirmed decisions
@@ -271,5 +285,7 @@ The owner of the project confirmed these decisions on 2026-11-24.
 | Different configurations between instances. | The failure condition depends on the reporter. | Fingerprint, warning, and metric. |
 | An adapter contains a second implementation of the transitions. | Adapters behave differently. | The conformance suite compares each adapter with the pure state machine. |
 | Tests with real time are not stable. | Slow or flaky continuous integration. | Fake clock in unit tests. Wait for conditions in integration tests. |
+| The coverage minimum of 98% causes tests without value. | High coverage with weak assertions. | Mutation tests, property tests, and the traceability check measure the quality of the assertions. |
+| The coverage minimum slows the delivery. | Milestones take longer. | Accepted. Test-driven development keeps the coverage high from the first commit of each milestone. |
 | The scope of seven policies is large. | The first release is late. | The circuit breaker is complete and released before the other policies start. |
 | The policy interface is fixed with only one policy. | A later policy does not fit the interface. | The tests of M1 contain a simple timeout and a simple retry that use the interface. The API can change until version 1.0. |

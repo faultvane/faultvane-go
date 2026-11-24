@@ -15,10 +15,10 @@ You need Go 1.24 or later and Docker. The integration tests start each store, fo
 ```sh
 go build ./...
 go vet ./...
-go test -race ./...
+sh scripts/coverage.sh
 ```
 
-The roadmap adds the commands for integration tests, chaos tests, and benchmarks when these tests exist.
+`scripts/coverage.sh` runs all tests with the race detector and checks the coverage minimum.
 
 ## Rules for code
 
@@ -32,6 +32,11 @@ The roadmap adds the commands for integration tests, chaos tests, and benchmarks
 
 ## Rules for tests
 
+Tests are the most important part of a change. [Testing](docs/testing.md) gives all rules.
+
+- The statement coverage must stay at 98% or more for each module and 95% or more for each package. Continuous integration rejects a change below these values.
+- Do not exclude code from the coverage measurement.
+- A change of behavior without a test for that behavior is not accepted, also when the coverage number is sufficient.
 - Use test-driven development where it fits.
 - Test observable behavior, not implementation details.
 - Tests are deterministic. Use the fake clock. Do not use `time.Sleep` to wait for a result.
