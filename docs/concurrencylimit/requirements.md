@@ -87,3 +87,13 @@ This rule has the name AIMD: additive increase, multiplicative decrease.
 |---|---|
 | CL-24 | `Stats` returns the number of permitted calls, the number of rejected calls, the number of overload signals as decreases of the limit, the effective limit, and the number of calls in progress. To count makes no memory allocation and uses no lock. |
 | CL-25 | The OpenTelemetry module exports the values of `Stats` as metrics. The attributes are the name that the application gives to the limiter and the result of the decision. |
+
+## 6. Events and logs
+
+| ID | Requirement |
+|---|---|
+| CL-26 | The option `WithObserver` sets the observer of the events. The default is no observer. The option `WithLogger` sets the logger of the package `log/slog`. The default is `slog.Default()`. `New` returns an error that matches `faultvane.ErrInvalidConfig` when a value is nil. |
+| CL-27 | The limiter gives a `LimitChanged` event for each change of the effective limit. The event contains the effective limit before and after the change. A change of only the fraction of the limit gives no event. Concurrent changes give one event for each change. |
+| CL-28 | The limiter writes a log record with the level `WARN` when the effective limit decreases to `MinLimit`. It writes a log record with the level `INFO` when the effective limit then increases to `InitialLimit`. It writes no second `WARN` record before the `INFO` record. It writes no log record for a different change. A record contains only the effective limit before and after the change. |
+| CL-29 | When the observer panics, the limiter recovers and writes a log record with the level `ERROR`. The caller gets the result of the call. The call is not in progress after that. |
+| CL-30 | A call that does not change the effective limit gives no event and no log record. Such a call, and a change of the limit that gives no log record, make no memory allocation in a limiter with an observer and a logger. |
