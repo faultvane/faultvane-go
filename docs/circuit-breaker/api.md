@@ -40,6 +40,8 @@ receipt, err := circuitbreaker.Execute(ctx, breaker, func(ctx context.Context) (
 
 `Execute` is a generic function, because a Go method cannot have a type parameter.
 
+When the call panics, the breaker records a failure and panics again with the same value.
+
 ### Function without a result
 
 ```go
