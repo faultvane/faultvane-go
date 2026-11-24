@@ -38,6 +38,9 @@ jobs:
         run: sh scripts/coverage.sh
       - name: Check requirement traceability
         run: sh scripts/traceability.sh
+      - name: Test the tools
+        working-directory: tools
+        run: go vet ./... && go test -count=1 ./...
 
   lint:
     name: Lint (${{ matrix.module }})
@@ -46,7 +49,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [".", "store/redis", "store/sql", "store/mongodb", "otel", "examples", "scenarios"]
+        module: [".", "store/redis", "store/sql", "store/mongodb", "otel", "examples", "scenarios", "tools"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7

@@ -27,7 +27,7 @@ This table gives each gate and its real status.
 | Fuzzing | Each fuzz target runs for 3 minutes and finds nothing. | Each day | Active, as a scheduled workflow |
 | System benchmark | Acceptance test AT-7 passes with the Redis adapter. | Each week | Active, as a scheduled workflow |
 | Chaos | The fault tests pass. | Each change | Active only as tests of the Redis adapter with a TCP proxy. No separate scheduled gate exists. See section 8. |
-| Mutation | The mutation score of the critical packages is 90% or more. | Not automated | **Not active.** The maintainers run mutations by hand. See section 2. |
+| Mutation | The mutation score of each policy package is 90% or more. | Each day | Active, as a scheduled workflow. See section 2. |
 | Benchmark comparison | No benchmark is worse than its baseline by more than the permitted margin. | Not automated | **Not active.** No workflow compares a benchmark with its baseline. A person compares the results with [benchmarks](benchmarks.md). |
 
 No active gate has a manual override.
@@ -86,10 +86,37 @@ Three other gates find it:
 
 ### Status of the mutation gate
 
-The automated mutation gate is not active.
-It needs an external tool in continuous integration. The tool is not selected and not tested.
-The maintainers run mutations by hand and record the result in the [roadmap](roadmap.md).
-Requirement QA-9 is satisfied for the property tests. For the mutation score, it is satisfied only by these manual runs.
+The mutation gate is active. The command is `sh scripts/mutation.sh`. The workflow `mutation.yml` runs it each day.
+
+- The tool is `tools/mutation`, a separate module of the repository. It uses only the standard library.
+- The tool changes one operator in one file for each mutant: a comparison (`<`, `<=`, `>`, `>=`, `==`, `!=`), a logical operator (`&&`, `||`), or `+` and `-`. It does not change the text of a string.
+- For each mutant, the tool runs the tests of the package without the race detector. The mutant is killed when a test fails or when the tests do not complete in the time limit.
+- The score of a package is the number of killed mutants divided by the number of mutants that compile.
+- The gate fails when the score of a package is below 90%. The packages are `circuitbreaker`, `timeout`, `retry`, `bulkhead`, `concurrencylimit`, `loadshed`, and `ratelimit`.
+- The tool prints each mutant that survives.
+
+Limits of the gate:
+
+- The gate does not apply to the conformance suite `circuitbreaker/storetest`, to the store adapters, or to the `otel` module. The score of `circuitbreaker/storetest` is 63.2%.
+- The tool does not remove statements and does not change constants.
+- Some mutants that survive have no effect on the behavior. The tool cannot find them. They decrease the score.
+
+Result on 2026-11-24:
+
+| Package | Mutants | Killed | Score |
+|---|---|---|---|
+| `circuitbreaker` | 178 | 171 | 96.1% |
+| `timeout` | 6 | 6 | 100% |
+| `retry` | 30 | 30 | 100% |
+| `bulkhead` | 11 | 11 | 100% |
+| `concurrencylimit` | 23 | 23 | 100% |
+| `loadshed` | 15 | 15 | 100% |
+| `ratelimit` | 10 | 9 | 90.0% |
+
+The 7 mutants that survive in `circuitbreaker` are in `sync.go`: 4 in the condition that decides if a snapshot replaces the local view, and 3 in the delay calculation of the synchronizer loop.
+The mutant that survives in `ratelimit` has no effect on the behavior: a full bucket gives the same result with `>=` and with `>`.
+
+Requirement QA-9 is satisfied for the seven policy packages.
 
 ### Scripts in a store
 
@@ -238,7 +265,7 @@ Each requirement and each acceptance test has an identifier, for example `GEN-3`
 
 - The name of an acceptance test contains its identifier, for example `TestAT5_StaleWriterIsRejected`.
 - A test that proves a requirement names the identifier in a subtest name or in the test table.
-- The script `scripts/traceability.sh` runs in continuous integration. It reads `scripts/implemented-requirements.txt`, the list of the requirements that the completed milestones implement. The list has 234 identifiers. It fails when an identifier of the list has no test, or when a test names an identifier that the requirements documents do not define.
+- The script `scripts/traceability.sh` runs in continuous integration. It reads `scripts/implemented-requirements.txt`, the list of the requirements that the completed milestones implement. The list has 235 identifiers. It fails when an identifier of the list has no test, or when a test names an identifier that the requirements documents do not define.
 - A requirement about the documentation or about the process, for example TK-4 or QA-3, has no test in the code. A review checks it.
 
 ## 10. Benchmarks

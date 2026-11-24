@@ -10,6 +10,7 @@ No release exists yet. This section lists what the repository contains.
 
 ### Added
 
+- Mutation gate: the tool `tools/mutation` and `scripts/mutation.sh` check a mutation score of 90% or more for each policy package.
 - Scenario tests in Docker: 10 pods, a controllable dependency, and Redis, PostgreSQL, MySQL, and MongoDB.
 - Correction: the rate limiter does not reject a call when a goroutine uses a clock value from before the last refill.
 - Correction: a new row of the SQL adapter has an expiry time, so a cleanup does not remove it.

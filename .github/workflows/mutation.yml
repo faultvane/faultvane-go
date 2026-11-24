@@ -1,0 +1,26 @@
+name: Mutation
+
+on:
+  schedule:
+    - cron: "37 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    name: Mutation ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [circuitbreaker, timeout, retry, bulkhead, concurrencylimit, loadshed, ratelimit]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: Check the mutation score
+        run: sh scripts/mutation.sh ${{ matrix.package }}
