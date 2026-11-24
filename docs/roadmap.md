@@ -28,7 +28,7 @@ flowchart LR
 | Milestone | Result | Status |
 |---|---|---|
 | M0 | Repository, requirements, design, plan | Done |
-| M1 | The core of the toolkit and a correct local circuit breaker | Planned |
+| M1 | The core of the toolkit and a correct local circuit breaker | Done, one open item |
 | M2 | Shared state and shared failure detection through a store, with the in-memory adapter and the Redis adapter | Planned |
 | M3 | Probes coordinated across instances | Planned |
 | M4 | Local mode, reconciliation, and data loss handling | Planned |
@@ -91,6 +91,21 @@ Exit criteria:
 - The unit tests of [testing.md](testing.md) section 3 and the property tests of the state machine invariants pass with `-race`.
 - The request path benchmark exists. `Execute` in `CLOSED` makes 0 allocations.
 - The core module has no dependencies.
+
+Result on 2026-11-24:
+
+- [x] All active quality gates pass. The statement coverage is 100% for each package.
+- [x] 40 requirements are in `scripts/implemented-requirements.txt`, and each has a test.
+- [x] The benchmarks exist. [Benchmarks](benchmarks.md) records the baseline: 83 ns for a call on a closed breaker, with 0 allocations.
+- [x] The core module has no dependencies.
+- [x] The property test and the fuzz target check the six invariants of the state machine.
+- [x] A manual mutation run changed 43 conditions and values in the code. The tests failed for 42. The last change has no effect on the behavior.
+- [ ] Open: the automated mutation gate. It needs an external tool in continuous integration. The tool is not selected yet.
+
+Differences from the plan:
+
+- `ErrStoreUnavailable`, `Mode`, and `Close` are not part of M1. They come with the store in M2.
+- The failure rate condition is always on. The design permitted to turn it off.
 
 ### M2: Shared state
 

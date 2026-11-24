@@ -36,6 +36,8 @@ jobs:
         run: go vet ./...
       - name: Test with coverage minimum
         run: sh scripts/coverage.sh
+      - name: Check requirement traceability
+        run: sh scripts/traceability.sh
 
   lint:
     name: Lint

@@ -16,9 +16,11 @@ You need Go 1.24 or later and Docker. The integration tests start each store, fo
 go build ./...
 go vet ./...
 sh scripts/coverage.sh
+sh scripts/traceability.sh
 ```
 
 `scripts/coverage.sh` runs all tests with the race detector and checks the coverage minimum.
+`scripts/traceability.sh` checks that each implemented requirement has a test. When you implement a requirement, add its identifier to `scripts/implemented-requirements.txt` and name the identifier in the test.
 
 ## Rules for code
 

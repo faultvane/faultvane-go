@@ -8,6 +8,12 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Core package: `ErrRejected`, `ErrInvalidConfig`, `Clock`, `Policy`, `Combine`, and `Execute`.
+- Package `circuitbreaker`: a local circuit breaker with a time-based sliding window, failure rate, failure count, and slow call conditions, coordinated half-open probes with leases, generations, and a classifier.
+- Package `faultvanetest`: a clock that a test controls.
+- Requirement traceability check and a scheduled fuzz workflow.
+- Benchmark baseline for the local circuit breaker.
+
 - Repository foundation.
 - Apache License 2.0.
 - Store interface with adapters in the design: the shared state can be in Redis, a SQL database, or another store.

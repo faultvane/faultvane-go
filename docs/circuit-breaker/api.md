@@ -1,7 +1,10 @@
 # API
 
-This document describes the planned public API of the circuit breaker.
+This document describes the public API of the circuit breaker.
 The API can change before version 1.0.
+
+Status: `New`, `Execute`, `Do`, `Allow`, the permit, `Name`, `State`, the classifier, and the errors of the breaker are implemented.
+The store, `Mode`, `Close`, and the observer are planned.
 
 ## 1. Create a breaker
 

@@ -29,8 +29,8 @@ The circuit opens when one of these conditions is true for the window:
 | The number of calls is equal to or larger than the minimum, and the failure rate is equal to or larger than the failure rate threshold. | `MinimumCalls`, `FailureRateThreshold` |
 | The number of calls is equal to or larger than the minimum, and the slow call rate is equal to or larger than the slow call rate threshold. | `MinimumCalls`, `SlowCallDuration`, `SlowCallRateThreshold` |
 
-A condition is off when its threshold has no value.
-At least one condition must be on.
+The failure rate condition is always on.
+The other two conditions are off when their thresholds have no value.
 
 ## 3. Window
 

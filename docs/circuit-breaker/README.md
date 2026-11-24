@@ -4,6 +4,8 @@ The circuit breaker stops calls to a dependency that fails.
 It works as a local breaker in one process.
 With a shared store, all instances of a service share one circuit.
 
+Status: the local breaker is implemented. The shared store, local mode, and observability are planned.
+
 | Document | Content |
 |---|---|
 | [Requirements](requirements.md) | What the breaker must do. Each requirement and acceptance test has an identifier. |

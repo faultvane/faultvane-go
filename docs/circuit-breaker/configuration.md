@@ -3,13 +3,15 @@
 All options have defaults.
 `New` validates the configuration and fails immediately when it is not valid.
 
+Status: the options of the sections "Failure detection" and "Open and half-open" are implemented, except `ProbeAttemptInterval`. The option `Clock` is also implemented. It sets the clock, and tests use it. All other options are planned.
+
 ## 1. Breaker options
 
 ### Failure detection
 
 | Option | Default | Meaning |
 |---|---|---|
-| `FailureRateThreshold` | `0.5` | The circuit opens when the failure rate of the window is equal to or larger than this value. Range: above 0, at most 1. |
+| `FailureRateThreshold` | `0.5` | The circuit opens when the failure rate of the window is equal to or larger than this value. Range: above 0, at most 1. This condition is always on. With the value `1`, it applies only when all calls fail. |
 | `MinimumCalls` | `20` | The rate thresholds apply only when the window has this number of calls or more. |
 | `FailureThreshold` | Off | The circuit opens when the number of failures in the window is equal to or larger than this value. |
 | `SlowCallDuration` | Off | A call with this duration or longer is a slow call. |
@@ -100,12 +102,13 @@ The in-memory adapter has no options.
 | Rule | Reason |
 |---|---|
 | The name and the namespace contain only `a-z`, `A-Z`, `0-9`, `.`, `_`, `-`, and have 1 to 64 characters. | Keys cannot collide. Metric labels stay small. |
-| At least one failure condition is on. | A breaker that cannot open gives no protection. |
 | Each rate threshold is above 0 and at most 1. | Other values have no meaning. |
 | `MinimumCalls`, `FailureThreshold`, `WindowBuckets`, `HalfOpenMaxProbes` are 1 or more. | Other values have no meaning. |
 | `SlowCallRateThreshold` and `SlowCallDuration` are set together. | One without the other has no effect. |
 | `HalfOpenSuccessThreshold` is 1 or more. | The circuit must be able to close. |
 | All durations are above 0. | Other values have no meaning. |
+| `WindowSize` gives each bucket a duration above 0. | A bucket needs a duration. |
+| `Classifier` and `Clock` are not nil. | The breaker cannot work without them. |
 | `WindowSize / WindowBuckets` is equal to or longer than `SyncInterval`. | A report must go into the correct bucket. |
 | `EarlyReportInterval` is not longer than `SyncInterval`. | An early report must be earlier. |
 | `StoreTimeout` is shorter than `SyncInterval`. | One slow operation must not delay the next cycle. |

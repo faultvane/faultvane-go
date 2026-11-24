@@ -9,13 +9,14 @@
 | [Policy composition](policy-composition.md) | The order of the policies and the interaction with retries. |
 | [Testing](testing.md) | The test levels, the coverage rule, and the quality gates. |
 | [Roadmap](roadmap.md) | The milestones, their exit criteria, and the definition of done. |
+| [Benchmarks](benchmarks.md) | Measured results with the machine and the Go version. |
 | [Decision records](adr/README.md) | The important design decisions, the alternatives, and the consequences. |
 
 ## Policies
 
 | Policy | Documents | Status |
 |---|---|---|
-| Circuit breaker | [Design documents](circuit-breaker/README.md) | Design complete |
+| Circuit breaker | [Design documents](circuit-breaker/README.md) | Local breaker implemented. Shared state planned. |
 | Timeout | Not written | Planned |
 | Retry | Not written | Planned |
 | Bulkhead | Not written | Planned |
