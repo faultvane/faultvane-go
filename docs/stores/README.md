@@ -12,6 +12,7 @@ An **adapter** implements the interface for one type of store.
 | In-memory | `store/memory` | Core | Planned for the first release |
 | [Redis](redis.md) | `store/redis` | Separate | Planned for the first release |
 | SQL database | `store/sql` | Separate | Planned after the first release |
+| MongoDB | `store/mongodb` | Separate | Planned after the SQL adapter |
 | Your own | Your package | Your module | See section 6 |
 
 The in-memory adapter keeps the state in one process.
@@ -151,7 +152,27 @@ This does not affect application requests, because the request path does not cal
 It affects the lowest practical sync interval.
 The SQL adapter will document measured limits.
 
-## 8. Comparison of the adapters
+## 8. Candidate adapters
+
+This table shows which stores can satisfy the contract.
+
+| Store | Fits the contract | Atomic mechanism | Clock | Status |
+|---|---|---|---|---|
+| Redis | Yes | Lua script | `TIME` | First release |
+| PostgreSQL, MySQL | Yes | Transaction with a row lock | Database server time | Planned |
+| MongoDB | Yes | `findOneAndUpdate` with an update pipeline on one document for each breaker | `$$NOW`. Needs MongoDB 4.2 or later. | Planned |
+| etcd | Yes | Transaction with a compare on the revision | Leases of the server | Candidate |
+| DynamoDB | Partly | Conditional write | No server clock that a write can read. The adapter needs a different clock source. | Candidate |
+| Memcached | No | Compare-and-set on one value only | None | Not possible |
+
+A candidate becomes a milestone of the [roadmap](../roadmap.md) when a user needs it.
+The statements for the candidates come from the documentation of the stores. The design document of each adapter must confirm them with tests.
+
+Each adapter has a cost: tests against a real store with the full coverage minimum, the conformance suite, a container in continuous integration, and maintenance for each new version of the store and of its client library.
+After version 1.0, the data layout of an adapter is a compatibility commitment.
+For this reason, the project adds an adapter only when it has users.
+
+## 9. Comparison of the adapters
 
 | Property | In-memory | Redis | SQL database |
 |---|---|---|---|
