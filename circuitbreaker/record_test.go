@@ -14,26 +14,26 @@ const (
 
 var testStart = time.Unix(1_000_000, 0)
 
-func openMachine(t *testing.T) machine {
+func openMachine(t *testing.T) Record {
 	t.Helper()
-	m := machine{}.trip(0, testStart, testOpenDuration)
-	if m.state != Open {
-		t.Fatalf("state = %v, want open", m.state)
+	m := Record{}.trip(0, testStart, testOpenDuration)
+	if m.State != Open {
+		t.Fatalf("state = %v, want open", m.State)
 	}
 	return m
 }
 
-func halfOpenMachine(t *testing.T, limit int) (machine, time.Time) {
+func halfOpenMachine(t *testing.T, limit int) (Record, time.Time) {
 	t.Helper()
 	now := testStart.Add(testOpenDuration)
 	m, granted := openMachine(t).requestProbe(1, now, limit, testLease)
-	if m.state != HalfOpen || !granted {
-		t.Fatalf("state = %v, granted = %v, want half_open, true", m.state, granted)
+	if m.State != HalfOpen || !granted {
+		t.Fatalf("state = %v, granted = %v, want half_open, true", m.State, granted)
 	}
 	return m, now
 }
 
-func assertUnchanged(t *testing.T, before, after machine) {
+func assertUnchanged(t *testing.T, before, after Record) {
 	t.Helper()
 	if !reflect.DeepEqual(before, after) {
 		t.Fatalf("machine changed from %+v to %+v", before, after)
@@ -51,14 +51,14 @@ func TestStateString(t *testing.T) {
 
 func TestMachineTrip(t *testing.T) {
 	t.Run("SM-1 the zero machine is closed with generation 0", func(t *testing.T) {
-		if m := (machine{}); m.state != Closed || m.generation != 0 {
+		if m := (Record{}); m.State != Closed || m.Generation != 0 {
 			t.Fatalf("machine = %+v", m)
 		}
 	})
 
 	t.Run("SM-2 T1 a trip opens a closed machine", func(t *testing.T) {
-		m := machine{}.trip(0, testStart, testOpenDuration)
-		want := machine{state: Open, generation: 1, transitionAt: testStart, openDuration: testOpenDuration}
+		m := Record{}.trip(0, testStart, testOpenDuration)
+		want := Record{State: Open, Generation: 1, TransitionAt: testStart, OpenDuration: testOpenDuration}
 		assertUnchanged(t, want, m)
 		if until := m.openUntil(); !until.Equal(testStart.Add(testOpenDuration)) {
 			t.Fatalf("openUntil = %v", until)
@@ -66,26 +66,26 @@ func TestMachineTrip(t *testing.T) {
 	})
 
 	t.Run("GEN-3 G5 a trip with an old generation changes nothing", func(t *testing.T) {
-		m := machine{generation: 4}
+		m := Record{Generation: 4}
 		assertUnchanged(t, m, m.trip(3, testStart, testOpenDuration))
 		assertUnchanged(t, m, m.trip(5, testStart, testOpenDuration))
 	})
 
 	t.Run("SM-7 a trip changes nothing when the machine is not closed", func(t *testing.T) {
 		open := openMachine(t)
-		assertUnchanged(t, open, open.trip(open.generation, testStart.Add(time.Second), time.Hour))
+		assertUnchanged(t, open, open.trip(open.Generation, testStart.Add(time.Second), time.Hour))
 		halfOpen, now := halfOpenMachine(t, 1)
-		assertUnchanged(t, halfOpen, halfOpen.trip(halfOpen.generation, now, time.Hour))
+		assertUnchanged(t, halfOpen, halfOpen.trip(halfOpen.Generation, now, time.Hour))
 	})
 }
 
 func TestMachineRequestProbe(t *testing.T) {
 	t.Run("SM-7 a closed machine grants no probe", func(t *testing.T) {
-		m, granted := machine{}.requestProbe(1, testStart, 1, testLease)
+		m, granted := Record{}.requestProbe(1, testStart, 1, testLease)
 		if granted {
 			t.Fatal("granted = true")
 		}
-		assertUnchanged(t, machine{}, m)
+		assertUnchanged(t, Record{}, m)
 	})
 
 	t.Run("SM-3 an open machine grants no probe before the open duration ends", func(t *testing.T) {
@@ -99,14 +99,14 @@ func TestMachineRequestProbe(t *testing.T) {
 
 	t.Run("SM-4 T2 the first probe request at the end of the open duration gives half-open", func(t *testing.T) {
 		m, now := halfOpenMachine(t, 1)
-		want := machine{state: HalfOpen, generation: 2, transitionAt: now, leases: []lease{{token: 1, expiresAt: now.Add(testLease)}}}
+		want := Record{State: HalfOpen, Generation: 2, TransitionAt: now, Leases: []Lease{{Token: 1, ExpiresAt: now.Add(testLease)}}}
 		assertUnchanged(t, want, m)
 	})
 
 	t.Run("SM-5 HO-4 a half-open machine grants no probe above the limit", func(t *testing.T) {
 		m, now := halfOpenMachine(t, 1)
 		next, granted := m.requestProbe(2, now.Add(time.Second), 1, testLease)
-		if granted || next.generation != m.generation || len(next.leases) != 1 || next.leases[0].token != 1 {
+		if granted || next.Generation != m.Generation || len(next.Leases) != 1 || next.Leases[0].Token != 1 {
 			t.Fatalf("granted = %v, machine = %+v", granted, next)
 		}
 	})
@@ -115,8 +115,8 @@ func TestMachineRequestProbe(t *testing.T) {
 		m, now := halfOpenMachine(t, 2)
 		m, second := m.requestProbe(2, now, 2, testLease)
 		_, third := m.requestProbe(3, now, 2, testLease)
-		if !second || third || len(m.leases) != 2 {
-			t.Fatalf("second = %v, third = %v, leases = %d, want true, false, 2", second, third, len(m.leases))
+		if !second || third || len(m.Leases) != 2 {
+			t.Fatalf("second = %v, third = %v, leases = %d, want true, false, 2", second, third, len(m.Leases))
 		}
 	})
 
@@ -124,7 +124,7 @@ func TestMachineRequestProbe(t *testing.T) {
 		m, now := halfOpenMachine(t, 1)
 		_, early := m.requestProbe(2, now.Add(testLease-time.Nanosecond), 1, testLease)
 		next, atEnd := m.requestProbe(2, now.Add(testLease), 1, testLease)
-		if early || !atEnd || len(next.leases) != 1 || next.leases[0].token != 2 || next.generation != m.generation {
+		if early || !atEnd || len(next.Leases) != 1 || next.Leases[0].Token != 2 || next.Generation != m.Generation {
 			t.Fatalf("early = %v, atEnd = %v, machine = %+v", early, atEnd, next)
 		}
 	})
@@ -132,8 +132,8 @@ func TestMachineRequestProbe(t *testing.T) {
 	t.Run("SM-8 a probe request does not change the machine that it started from", func(t *testing.T) {
 		m, now := halfOpenMachine(t, 2)
 		_, _ = m.requestProbe(2, now, 2, testLease)
-		if len(m.leases) != 1 {
-			t.Fatalf("leases = %d, want 1", len(m.leases))
+		if len(m.Leases) != 1 {
+			t.Fatalf("leases = %d, want 1", len(m.Leases))
 		}
 	})
 }
@@ -141,28 +141,28 @@ func TestMachineRequestProbe(t *testing.T) {
 func TestMachineCompleteProbe(t *testing.T) {
 	t.Run("SM-7 a probe result changes nothing when the machine is not half-open", func(t *testing.T) {
 		open := openMachine(t)
-		assertUnchanged(t, open, open.completeProbe(open.generation, 1, Success, testStart, 1, testOpenDuration))
-		assertUnchanged(t, machine{}, machine{}.completeProbe(0, 1, Failure, testStart, 1, testOpenDuration))
+		assertUnchanged(t, open, open.completeProbe(open.Generation, 1, Success, testStart, 1, testOpenDuration))
+		assertUnchanged(t, Record{}, Record{}.completeProbe(0, 1, Failure, testStart, 1, testOpenDuration))
 	})
 
 	t.Run("GEN-3 G4 a probe result with an old generation changes nothing", func(t *testing.T) {
 		m, now := halfOpenMachine(t, 1)
-		assertUnchanged(t, m, m.completeProbe(m.generation-1, 1, Success, now, 1, testOpenDuration))
-		assertUnchanged(t, m, m.completeProbe(m.generation+1, 1, Failure, now, 1, testOpenDuration))
+		assertUnchanged(t, m, m.completeProbe(m.Generation-1, 1, Success, now, 1, testOpenDuration))
+		assertUnchanged(t, m, m.completeProbe(m.Generation+1, 1, Failure, now, 1, testOpenDuration))
 	})
 
 	t.Run("HO-4 a probe result with an unknown token changes nothing", func(t *testing.T) {
 		m, now := halfOpenMachine(t, 1)
-		next := m.completeProbe(m.generation, 99, Failure, now, 1, testOpenDuration)
-		if next.state != HalfOpen || next.generation != m.generation || len(next.leases) != 1 {
+		next := m.completeProbe(m.Generation, 99, Failure, now, 1, testOpenDuration)
+		if next.State != HalfOpen || next.Generation != m.Generation || len(next.Leases) != 1 {
 			t.Fatalf("machine = %+v", next)
 		}
 	})
 
 	t.Run("HO-3 a probe result after the end of its lease changes nothing", func(t *testing.T) {
 		m, now := halfOpenMachine(t, 1)
-		next := m.completeProbe(m.generation, 1, Success, now.Add(testLease), 1, testOpenDuration)
-		if next.state != HalfOpen || next.generation != m.generation || len(next.leases) != 0 || next.probeSuccesses != 0 {
+		next := m.completeProbe(m.Generation, 1, Success, now.Add(testLease), 1, testOpenDuration)
+		if next.State != HalfOpen || next.Generation != m.Generation || len(next.Leases) != 0 || next.ProbeSuccesses != 0 {
 			t.Fatalf("machine = %+v", next)
 		}
 	})
@@ -170,36 +170,36 @@ func TestMachineCompleteProbe(t *testing.T) {
 	t.Run("SM-6 T4 a failed probe opens the machine", func(t *testing.T) {
 		m, now := halfOpenMachine(t, 1)
 		at := now.Add(time.Second)
-		next := m.completeProbe(m.generation, 1, Failure, at, 1, time.Minute)
-		want := machine{state: Open, generation: 3, transitionAt: at, openDuration: time.Minute}
+		next := m.completeProbe(m.Generation, 1, Failure, at, 1, time.Minute)
+		want := Record{State: Open, Generation: 3, TransitionAt: at, OpenDuration: time.Minute}
 		assertUnchanged(t, want, next)
 	})
 
 	t.Run("SM-6 T3 a successful probe closes the machine at the success threshold", func(t *testing.T) {
 		m, now := halfOpenMachine(t, 1)
 		at := now.Add(time.Second)
-		next := m.completeProbe(m.generation, 1, Success, at, 1, testOpenDuration)
-		want := machine{state: Closed, generation: 3, transitionAt: at}
+		next := m.completeProbe(m.Generation, 1, Success, at, 1, testOpenDuration)
+		want := Record{State: Closed, Generation: 3, TransitionAt: at}
 		assertUnchanged(t, want, next)
 	})
 
 	t.Run("SM-6 a successful probe below the success threshold keeps half-open", func(t *testing.T) {
 		m, now := halfOpenMachine(t, 1)
-		next := m.completeProbe(m.generation, 1, Success, now, 2, testOpenDuration)
-		if next.state != HalfOpen || next.generation != m.generation || next.probeSuccesses != 1 || len(next.leases) != 0 {
+		next := m.completeProbe(m.Generation, 1, Success, now, 2, testOpenDuration)
+		if next.State != HalfOpen || next.Generation != m.Generation || next.ProbeSuccesses != 1 || len(next.Leases) != 0 {
 			t.Fatalf("machine = %+v", next)
 		}
 		next, granted := next.requestProbe(2, now, 1, testLease)
-		next = next.completeProbe(next.generation, 2, Success, now, 2, testOpenDuration)
-		if !granted || next.state != Closed || next.generation != m.generation+1 || next.probeSuccesses != 0 {
+		next = next.completeProbe(next.Generation, 2, Success, now, 2, testOpenDuration)
+		if !granted || next.State != Closed || next.Generation != m.Generation+1 || next.ProbeSuccesses != 0 {
 			t.Fatalf("granted = %v, machine = %+v", granted, next)
 		}
 	})
 
 	t.Run("SM-6 an ignored probe removes the lease and changes no state", func(t *testing.T) {
 		m, now := halfOpenMachine(t, 1)
-		next := m.completeProbe(m.generation, 1, Ignored, now, 1, testOpenDuration)
-		if next.state != HalfOpen || next.generation != m.generation || next.probeSuccesses != 0 || len(next.leases) != 0 {
+		next := m.completeProbe(m.Generation, 1, Ignored, now, 1, testOpenDuration)
+		if next.State != HalfOpen || next.Generation != m.Generation || next.ProbeSuccesses != 0 || len(next.Leases) != 0 {
 			t.Fatalf("machine = %+v", next)
 		}
 	})
@@ -208,9 +208,9 @@ func TestMachineCompleteProbe(t *testing.T) {
 		m, now := halfOpenMachine(t, 3)
 		m, _ = m.requestProbe(2, now, 3, testLease)
 		m, _ = m.requestProbe(3, now, 3, testLease)
-		next := m.completeProbe(m.generation, 2, Success, now, 5, testOpenDuration)
-		if len(next.leases) != 2 || next.leases[0].token != 1 || next.leases[1].token != 3 {
-			t.Fatalf("leases = %+v", next.leases)
+		next := m.completeProbe(m.Generation, 2, Success, now, 5, testOpenDuration)
+		if len(next.Leases) != 2 || next.Leases[0].Token != 1 || next.Leases[1].Token != 3 {
+			t.Fatalf("leases = %+v", next.Leases)
 		}
 	})
 }
@@ -221,21 +221,21 @@ const (
 )
 
 type step struct {
-	before, after machine
+	before, after Record
 	now           time.Time
 	stale         bool
 }
 
 func replay(events []byte) []step {
 	var steps []step
-	m := machine{}
+	m := Record{}
 	now := testStart
 	token := uint64(0)
 	for i := 0; i+2 < len(events); i += 3 {
 		operation, argument, choice := events[i]%3, events[i+1], events[i+2]
 		now = now.Add(time.Duration(argument%16) * time.Second)
 		stale := choice&1 == 1
-		generation := m.generation
+		generation := m.Generation
 		if stale {
 			generation += uint64(choice>>1) + 1
 		}
@@ -263,14 +263,14 @@ func checkInvariants(t *testing.T, events []byte) {
 	}
 	permitted := map[[2]State]bool{{Closed, Open}: true, {Open, HalfOpen}: true, {HalfOpen, Closed}: true, {HalfOpen, Open}: true}
 	for i, s := range steps {
-		stateChanged := s.before.state != s.after.state
+		stateChanged := s.before.State != s.after.State
 		switch {
-		case s.after.generation < s.before.generation:
-			t.Fatalf("GEN-1 invariant 1: step %d: generation went from %d to %d", i, s.before.generation, s.after.generation)
-		case stateChanged && !permitted[[2]State{s.before.state, s.after.state}]:
-			t.Fatalf("SM-7 invariant 2: step %d: transition %v to %v", i, s.before.state, s.after.state)
-		case stateChanged != (s.after.generation == s.before.generation+1), !stateChanged && s.after.generation != s.before.generation:
-			t.Fatalf("GEN-1 invariant 3: step %d: state %v to %v, generation %d to %d", i, s.before.state, s.after.state, s.before.generation, s.after.generation)
+		case s.after.Generation < s.before.Generation:
+			t.Fatalf("GEN-1 invariant 1: step %d: generation went from %d to %d", i, s.before.Generation, s.after.Generation)
+		case stateChanged && !permitted[[2]State{s.before.State, s.after.State}]:
+			t.Fatalf("SM-7 invariant 2: step %d: transition %v to %v", i, s.before.State, s.after.State)
+		case stateChanged != (s.after.Generation == s.before.Generation+1), !stateChanged && s.after.Generation != s.before.Generation:
+			t.Fatalf("GEN-1 invariant 3: step %d: state %v to %v, generation %d to %d", i, s.before.State, s.after.State, s.before.Generation, s.after.Generation)
 		case s.stale && !reflect.DeepEqual(s.before, s.after):
 			t.Fatalf("GEN-3 invariant 4: step %d: an event with a wrong generation changed %+v to %+v", i, s.before, s.after)
 		case len(s.after.validLeases(s.now)) > replayLimit:
@@ -297,8 +297,8 @@ func TestMachineInvariants(t *testing.T) {
 		}
 		checkInvariants(t, events)
 		for _, s := range replay(events) {
-			if s.before.state != s.after.state {
-				visited[[2]State{s.before.state, s.after.state}] = true
+			if s.before.State != s.after.State {
+				visited[[2]State{s.before.State, s.after.State}] = true
 			}
 		}
 	}

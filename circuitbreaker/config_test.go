@@ -2,6 +2,7 @@ package circuitbreaker
 
 import (
 	"errors"
+	"log/slog"
 	"math"
 	"strings"
 	"testing"
@@ -16,8 +17,8 @@ func TestDefaults(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if c.rules != (rules{minimumCalls: 20, failureRate: 0.5}) {
-			t.Errorf("rules = %+v", c.rules)
+		if c.thresholds != (Thresholds{MinimumCalls: 20, FailureRate: 0.5}) {
+			t.Errorf("thresholds = %+v", c.thresholds)
 		}
 		if c.windowSize != 10*time.Second || c.windowBuckets != 10 {
 			t.Errorf("window = %v, %d", c.windowSize, c.windowBuckets)
@@ -73,8 +74,8 @@ func TestOptions(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if c.rules != (rules{failureThreshold: 1, minimumCalls: 1, failureRate: 1, slowCallRate: 1}) {
-			t.Errorf("rules = %+v", c.rules)
+		if c.thresholds != (Thresholds{FailureThreshold: 1, MinimumCalls: 1, FailureRate: 1, SlowCallRate: 1}) {
+			t.Errorf("thresholds = %+v", c.thresholds)
 		}
 		if c.windowSize != 3 || c.windowBuckets != 3 || c.openDuration != 1 || c.probeTimeout != 1 {
 			t.Errorf("durations = %+v", c)
@@ -131,10 +132,27 @@ func TestValidation(t *testing.T) {
 		{"probe timeout 0", "a", []Option{WithProbeTimeout(0)}, "ProbeTimeout"},
 		{"nil classifier", "a", []Option{WithClassifier(nil)}, "Classifier"},
 		{"nil clock", "a", []Option{WithClock(nil)}, "Clock"},
+		{"probe attempt interval below 0", "a", []Option{WithProbeAttemptInterval(-time.Nanosecond)}, "ProbeAttemptInterval"},
+		{"nil logger", "a", []Option{WithLogger(nil)}, "Logger"},
+		{"nil observer", "a", []Option{WithObserver(nil)}, "Observer"},
+		{"local failure threshold 0", "a", []Option{WithLocalFailureThreshold(0)}, "LocalFailureThreshold"},
+		{"local minimum calls 0", "a", []Option{WithLocalMinimumCalls(0)}, "LocalMinimumCalls"},
+		{"nil store", "a", []Option{WithStore(nil)}, "Store"},
+		{"store timeout 0", "a", shared(WithStoreTimeout(0)), "StoreTimeout"},
+		{"sync interval equal to the store timeout", "a", shared(WithSyncInterval(100 * time.Millisecond)), "SyncInterval"},
+		{"early report interval 0", "a", shared(WithEarlyReportInterval(0)), "EarlyReportInterval"},
+		{"early report interval longer than the sync interval", "a", shared(WithEarlyReportInterval(500*time.Millisecond + 1)), "EarlyReportInterval"},
+		{"bucket shorter than the sync interval", "a", shared(WithWindowSize(5*time.Second - 10)), "WindowSize"},
+		{"fault threshold 0", "a", shared(WithFaultThreshold(0)), "FaultThreshold"},
+		{"start timeout 0", "a", shared(WithStartTimeout(0)), "StartTimeout"},
+		{"maximum local fallback duration 0", "a", shared(WithMaxLocalFallbackDuration(0)), "MaxLocalFallbackDuration"},
+		{"unknown expired policy", "a", shared(WithLocalModeExpiredPolicy(AllowAll + 1)), "LocalModeExpiredPolicy"},
+		{"unknown start policy", "a", shared(WithStartPolicy(StartRejecting + 1)), "StartPolicy"},
+		{"no local fallback with the policy KeepLocalBreaker", "a", shared(WithLocalFallback(false)), "LocalModeExpiredPolicy"},
 	}
 	for _, c := range cases {
 		t.Run("CFG-3 TK-21 "+c.name, func(t *testing.T) {
-			b, err := New(c.id, c.opts...)
+			b, err := New(c.id, append([]Option{WithLogger(quiet)}, c.opts...)...)
 			if b != nil || !errors.Is(err, faultvane.ErrInvalidConfig) {
 				t.Fatalf("New() = %v, %v, want nil and ErrInvalidConfig", b, err)
 			}
@@ -160,14 +178,82 @@ func TestValidation(t *testing.T) {
 		{"window size equal to the buckets", "a", []Option{WithWindowSize(10 * time.Nanosecond)}},
 		{"one bucket", "a", []Option{WithWindowBuckets(1)}},
 		{"shortest durations", "a", []Option{WithOpenDuration(time.Nanosecond), WithProbeTimeout(time.Nanosecond)}},
+		{"probe attempt interval 0", "a", []Option{WithProbeAttemptInterval(0)}},
+		{"store options without a store are not checked", "a", []Option{WithStoreTimeout(0), WithFaultThreshold(0)}},
+		{"store with the defaults", "a", shared()},
+		{"sync interval one step longer than the store timeout", "a", shared(WithSyncInterval(100*time.Millisecond + 1))},
+		{"early report interval equal to the sync interval", "a", shared(WithEarlyReportInterval(500 * time.Millisecond))},
+		{"bucket equal to the sync interval", "a", shared(WithWindowSize(5 * time.Second))},
+		{"smallest store values", "a", shared(WithStoreTimeout(1), WithFaultThreshold(1), WithStartTimeout(1), WithMaxLocalFallbackDuration(1), WithEarlyReportInterval(1))},
+		{"no local fallback with the policy RejectAll", "a", shared(WithLocalFallback(false), WithLocalModeExpiredPolicy(RejectAll))},
+		{"each start policy and expired policy", "a", shared(WithStartPolicy(StartRejecting), WithLocalModeExpiredPolicy(AllowAll))},
+		{"local thresholds at 1", "a", []Option{WithLocalFailureThreshold(1), WithLocalMinimumCalls(1)}},
 	}
 	for _, c := range valid {
 		t.Run("CFG-3 valid: "+c.name, func(t *testing.T) {
-			if _, err := New(c.id, c.opts...); err != nil {
+			if _, err := New(c.id, append([]Option{WithLogger(quiet)}, c.opts...)...); err != nil {
 				t.Fatalf("New() error = %v, want nil", err)
 			}
 		})
 	}
+}
+
+func shared(opts ...Option) []Option {
+	manual := func(c *config) { c.manualSync = true }
+	return append([]Option{WithStore(NewMemoryStore(fixedClock{})), manual}, opts...)
+}
+
+func TestStoreDefaults(t *testing.T) {
+	t.Run("CFG-2 each store option has its documented default", func(t *testing.T) {
+		c, err := newConfig("a", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.storeTimeout != 100*time.Millisecond || c.syncInterval != 500*time.Millisecond || c.earlyReportInterval != 50*time.Millisecond {
+			t.Errorf("intervals = %v, %v, %v", c.storeTimeout, c.syncInterval, c.earlyReportInterval)
+		}
+		if c.faultThreshold != 3 || c.startTimeout != time.Second || c.stateTTL != time.Hour || c.probeAttemptInterval != 100*time.Millisecond {
+			t.Errorf("faultThreshold = %d, startTimeout = %v, stateTTL = %v, probeAttemptInterval = %v", c.faultThreshold, c.startTimeout, c.stateTTL, c.probeAttemptInterval)
+		}
+		if !c.localFallback || c.maxLocalFallbackDuration != 5*time.Minute || c.expiredPolicy != KeepLocalBreaker || c.startPolicy != StartWithProbe {
+			t.Errorf("local mode = %v, %v, %v, %v", c.localFallback, c.maxLocalFallbackDuration, c.expiredPolicy, c.startPolicy)
+		}
+		if c.localThresholds != c.thresholds || c.store != nil || c.observer != nil || c.logger != slog.Default() {
+			t.Errorf("localThresholds = %+v, store = %v, observer = %v", c.localThresholds, c.store, c.observer)
+		}
+	})
+
+	t.Run("CFG-1 each store option sets its value", func(t *testing.T) {
+		store, observer := NewMemoryStore(fixedClock{}), &events{}
+		c, err := newConfig("a", []Option{
+			WithStore(store), WithStoreTimeout(2), WithSyncInterval(time.Second), WithEarlyReportInterval(3), WithFaultThreshold(4),
+			WithStartTimeout(5), WithStateTTL(48 * time.Hour), WithProbeAttemptInterval(6), WithLocalFallback(false),
+			WithMaxLocalFallbackDuration(7), WithLocalModeExpiredPolicy(RejectAll), WithStartPolicy(StartClosed),
+			WithLocalFailureThreshold(8), WithLocalMinimumCalls(9), WithObserver(observer), WithLogger(quiet),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.store != store || c.storeTimeout != 2 || c.syncInterval != time.Second || c.earlyReportInterval != 3 || c.faultThreshold != 4 {
+			t.Errorf("store values = %+v", c)
+		}
+		if c.startTimeout != 5 || c.stateTTL != 48*time.Hour || c.probeAttemptInterval != 6 || c.localFallback || c.maxLocalFallbackDuration != 7 {
+			t.Errorf("values = %+v", c)
+		}
+		if c.expiredPolicy != RejectAll || c.startPolicy != StartClosed || c.observer != observer || c.logger != quiet {
+			t.Errorf("policies = %+v", c)
+		}
+		if want := (Thresholds{FailureThreshold: 8, MinimumCalls: 9, FailureRate: 0.5}); c.localThresholds != want {
+			t.Errorf("localThresholds = %+v, want %+v", c.localThresholds, want)
+		}
+	})
+
+	t.Run("TTL-2 the state TTL is never shorter than two times the open duration plus the window size", func(t *testing.T) {
+		c, err := newConfig("a", []Option{WithOpenDuration(time.Hour), WithWindowSize(10 * time.Minute)})
+		if err != nil || c.stateTTL != 2*(time.Hour+10*time.Minute) {
+			t.Fatalf("stateTTL = %v, err = %v", c.stateTTL, err)
+		}
+	})
 }
 
 func FuzzValidName(f *testing.F) {
