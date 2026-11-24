@@ -235,8 +235,7 @@ Requirements: SEC-1, PI-1 as documentation.
 
 Result:
 
-- [x] Two example programs exist: `examples/pipeline` with an HTTP client, and `examples/shared` with five instances and Redis. Each has a test of its output. Each runs with `go run`.
-- [ ] Not done: an example with a gRPC client.
+- [x] Three example programs exist: `examples/pipeline` with an HTTP client, `examples/shared` with five instances and Redis, and `examples/grpc` with a gRPC client interceptor. Each has a test of its output. Each runs with `go run`.
 - [x] The documents describe the implemented behavior and the measured values.
 - [ ] Not done: package documentation. See section 5.
 - [x] The changelog lists the content under `[Unreleased]`.
@@ -327,11 +326,10 @@ Result:
 | Transition notifications | Not implemented. The Redis adapter does not use Pub/Sub. The sync interval gives the propagation. |
 | Benchmarks | All results come from one Apple M4 machine with the stores in local containers. No result comes from a Linux server that is typical for production. |
 | Shared rate limit | Only the in-memory store and the Redis store exist. No test uses a Redis Cluster. The Docker scenarios do not include the shared rate limit. The instances do not get equal parts of the limit under overload. |
-| Examples in the documents | Requirement QA-13 is satisfied by the two example programs. No test compiles each code block of the documents. |
+| Examples in the documents | Requirement QA-13 is satisfied by the three example programs. No test compiles each code block of the documents. |
 | Documentation comments | The exported names have no documentation comments, because the project forbids comments in code. The package pages of the Go documentation site then show only the signatures. |
 | Tests of the adapters | AT-3 to AT-6 and the system benchmark do not run with the SQL adapter and the MongoDB adapter. No test uses a Redis Cluster with many nodes, Redis Sentinel, or a MongoDB replica set. |
 | Long run | No run of one hour for memory exists. |
-| gRPC example | Not written. |
 
 ## 6. Definition of done for the distributed circuit breaker
 

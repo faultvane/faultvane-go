@@ -164,7 +164,7 @@ faultvane-go/
 │       └── go.mod
 ├── otel/                    separate module, OpenTelemetry metrics and trace attributes
 │   └── go.mod
-├── examples/                separate module, two example programs with tests
+├── examples/                separate module, three example programs with tests
 │   ├── go.mod
 │   ├── pipeline/            four policies in one pipeline
 │   └── shared/              five instances that share one circuit through Redis

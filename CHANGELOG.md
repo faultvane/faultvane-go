@@ -39,7 +39,7 @@ Separate modules:
 - `store/sql` (package `sqlstore`): the SQL adapter for PostgreSQL and MySQL, with `Migrate`, `Schema`, and `Cleanup`.
 - `store/mongodb` (package `mongostore`): the MongoDB adapter, with `EnsureIndexes`.
 - `otel` (package `faultvaneotel`): `RegisterMetrics`, `Traced`, and `InstrumentStore` for the circuit breaker.
-- `examples`: the programs `pipeline` and `shared`, each with a test of its output.
+- `examples`: the programs `pipeline`, `shared`, and `grpc`, each with a test of its output.
 
 Tests and tools:
 
