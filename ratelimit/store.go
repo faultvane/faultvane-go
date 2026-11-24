@@ -26,19 +26,28 @@ type Grant struct {
 	StoreTime time.Time
 }
 
-type sharedBucket struct {
-	tokens float64
-	at     time.Time
+type Bucket struct {
+	Tokens float64
+	At     time.Time
+}
+
+func (b Bucket) Acquire(now time.Time, request Acquire) (Bucket, Grant) {
+	if now.Before(b.At) {
+		now = b.At
+	}
+	tokens := min(float64(request.Burst), b.Tokens+now.Sub(b.At).Seconds()*request.Rate+float64(request.Returned))
+	granted := max(math.Floor(min(float64(request.Wanted), tokens)), 0)
+	return Bucket{Tokens: tokens - granted, At: now}, Grant{Tokens: int64(granted), StoreTime: now}
 }
 
 type MemoryStore struct {
 	clock   faultvane.Clock
 	mu      sync.Mutex
-	buckets map[string]sharedBucket
+	buckets map[string]Bucket
 }
 
 func NewMemoryStore(clock faultvane.Clock) *MemoryStore {
-	return &MemoryStore{clock: clock, buckets: map[string]sharedBucket{}}
+	return &MemoryStore{clock: clock, buckets: map[string]Bucket{}}
 }
 
 func (s *MemoryStore) Acquire(ctx context.Context, name string, request Acquire) (Grant, error) {
@@ -48,16 +57,11 @@ func (s *MemoryStore) Acquire(ctx context.Context, name string, request Acquire)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.clock.Now()
-	burst := float64(request.Burst)
 	bucket, found := s.buckets[name]
 	if !found {
-		bucket = sharedBucket{tokens: burst, at: now}
+		bucket = Bucket{Tokens: float64(request.Burst), At: now}
 	}
-	if now.Before(bucket.at) {
-		now = bucket.at
-	}
-	tokens := min(burst, bucket.tokens+now.Sub(bucket.at).Seconds()*request.Rate+float64(request.Returned))
-	granted := max(math.Floor(min(float64(request.Wanted), tokens)), 0)
-	s.buckets[name] = sharedBucket{tokens: tokens - granted, at: now}
-	return Grant{Tokens: int64(granted), StoreTime: now}, nil
+	bucket, grant := bucket.Acquire(now, request)
+	s.buckets[name] = bucket
+	return grant, nil
 }
