@@ -170,7 +170,7 @@ Do not use them to decide if a call is permitted. Use `Allow` for that.
 | `LocalModeEntries` | The number of changes to local mode. |
 | `Reconciliations` | The number of reconciliations with the store. |
 | `LocalModeExpired` | `true` while local mode is longer than the maximum time. |
-| `ConfigMismatch` | `true` while the last writer of the shared state has a different configuration fingerprint. |
+| `ConfigMismatch` | `true` from the first store response with a different configuration fingerprint until 10 store responses in sequence have no different fingerprint. |
 
 All counters start at 0 when the application creates the breaker. They only increase.
 [Observability](observability.md) describes how the OpenTelemetry module exports them.

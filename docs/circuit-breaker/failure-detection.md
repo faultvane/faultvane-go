@@ -162,17 +162,26 @@ A change of the list of values or of the text needs a new version. Instances wit
 4. After each response, the instance compares that fingerprint with its own fingerprint.
 5. An empty fingerprint means "not known". It is never a difference. Data from before this function and a new breaker have no fingerprint.
 
-Each instance keeps one condition: "the last writer has a different configuration".
+Each instance keeps one condition: "a writer has a different configuration".
+
+- The condition starts at the first response with a fingerprint that is known and different.
+- The condition ends after 10 responses in sequence that have no different fingerprint. An empty fingerprint counts as no difference.
+- One response with a different fingerprint sets the count back to zero.
+
+The number 10 is a constant of the library. It is not an option.
+An instance that writes gets its own fingerprint in its next response. Without this rule, the condition would change at almost each synchronization in a fleet with two configurations.
+
 When the condition starts or ends, the instance sends one event and writes one log.
 `Stats().ConfigMismatch` and the metric `config_mismatch` show the current condition. [Observability](observability.md) describes these signals.
 
 ### Limits of the detection
 
 - The store keeps one fingerprint. An instance compares with the last writer only, not with each instance.
-- In a fleet with two configurations, the last writer changes with each write. The condition of an instance can start and end many times until all instances have the same configuration. Each change gives one event and one log.
+- In a fleet with two configurations, the condition of an instance stays while the other group writes at least one time in each 10 responses that the instance gets. When the other group writes less frequently, the condition can end and start again. Each change gives one event and one log.
+- The condition ends 10 responses after the last different fingerprint. With the default sync interval, that is approximately 5 seconds after the configurations became equal.
 - An instance finds a difference only after an instance with a different configuration wrote. An instance writes when it sends a report with counts or does a probe operation. A group of instances without traffic is not visible to the other group.
 - The fingerprint does not change while the circuit is `OPEN` and no probe operation occurs.
-- In local mode, the instance gets no response. The condition keeps its last value.
+- In local mode, the instance gets no response. The condition and the count keep their last values.
 
 ## 7. Limits of the design
 

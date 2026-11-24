@@ -177,7 +177,7 @@ The library does not trade the correctness of the shared state for more availabi
 | OB-3 | The library logs each state transition, each change of mode, each reconciliation, and each failed store operation. |
 | OB-4 | Logs and traces contain no credentials, request payloads, or tokens. |
 | OB-5 | OpenTelemetry tracing is optional. It adds no significant cost when it is off. |
-| OB-6 | The library reports a configuration difference between instances with an event, a log, a statistic, and a metric. It writes the event and the log only when the difference starts and when it ends. |
+| OB-6 | The library reports a configuration difference between instances with an event, a log, a statistic, and a metric. It writes the event and the log only when the difference starts and when it ends. The difference ends only after a fixed number of store responses in sequence without a different fingerprint. |
 
 ### Security
 

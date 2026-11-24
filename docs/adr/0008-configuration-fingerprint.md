@@ -30,7 +30,7 @@ The limits for a solution are:
 3. **The last writer wins.** The shared state keeps one fingerprint. `Report`, `AcquireProbe`, and `CompleteProbe` carry the fingerprint of the instance. The store saves it when it accepts the operation. An operation that the store ignores and `Restore` do not change it. A transition keeps it.
 4. **The response carries the fingerprint from before the operation.** The fingerprint after a write is always the fingerprint of the writer, so it gives no information. `Load` gives the current fingerprint.
 5. **An empty fingerprint means "not known".** It is never a difference. Data from before this decision and a new breaker have no fingerprint.
-6. **Detection only.** After each response of the store, the instance compares the fingerprint of the response with its own fingerprint. It keeps one condition. When the condition starts or ends, the instance sends the event `ConfigMismatchChanged` and writes one log. `Stats().ConfigMismatch` and the metric `faultvane.circuit_breaker.config_mismatch` show the condition. The breaker changes no permit decision, fails no call, and blocks no call.
+6. **Detection only.** After each response of the store, the instance compares the fingerprint of the response with its own fingerprint. It keeps one condition. The condition starts at the first response with a fingerprint that is known and different. It ends only after 10 responses in sequence without a different fingerprint. One response with a different fingerprint sets the count back to zero. The number 10 is an unexported constant, not an option. When the condition starts or ends, the instance sends the event `ConfigMismatchChanged` and writes one log. `Stats().ConfigMismatch` and the metric `faultvane.circuit_breaker.config_mismatch` show the condition. The breaker changes no permit decision, fails no call, and blocks no call.
 7. **Each adapter stores one more value.** The type `Record` has the field `Fingerprint`. The in-memory, SQL, and MongoDB adapters get it through `Record`. The Redis state hash has the field `fp`. Contract rule C13 and the conformance suite define the behavior for each adapter.
 
 ## Alternatives
@@ -41,6 +41,7 @@ The limits for a solution are:
 | The writer of the last transition wins. The store saves the fingerprint only at a transition. | A breaker that stays `CLOSED` makes no transition. The store then has no fingerprint, or an old one, for a long time. The detection would start only after an outage, when the difference already had an effect. |
 | No detection. The documentation tells the application to use one configuration. | This was the condition before the decision. The operator gets no signal. A configuration error stays hidden until a circuit opens at an unexpected threshold. |
 | Keep the fingerprint of each instance in the store. | The store needs a list of instances with a cleanup for instances that stopped. This is more data in each write and one more source of defects. The store interface has no identity for an instance. |
+| End the condition at the first response without a different fingerprint. | An instance that writes gets its own fingerprint in its next response. In a fleet with two configurations, the condition then changes at almost each synchronization, and each change gives a log. |
 | Reject the write of an instance with a different fingerprint. | A rolling deployment would stop the reports of one group of instances. That makes the shared window wrong. The detection must not change the behavior of the breaker. |
 
 ## Consequences
@@ -56,7 +57,9 @@ Positive:
 Negative:
 
 - A fleet with two configurations reports a difference during a rolling deployment, until all instances have the new configuration. This report is correct, and it is also noise for a planned deployment.
-- The store keeps only the last writer. In a fleet with two configurations, the last writer changes with each write. The condition of one instance can start and end many times, and each change gives one event and one log. The number of logs has a limit of one for each response of the store.
+- The store keeps only the last writer. The rule of 10 responses keeps the condition stable only while the other group writes at least one time in each 10 responses of the instance. When the other group writes less frequently, the condition can end and start again. Each change gives one event and one log.
+- The end of a difference is late by 10 responses. With the default sync interval, that is approximately 5 seconds.
+- The number 10 is a fixed value. A fleet with a small group of instances that writes rarely can need a different value.
 - The detection needs writes from each group. An instance writes when it sends a report with counts or does a probe operation. A group without traffic is not visible to the other group. An instance without traffic still reads the fingerprint of the last writer at each synchronization.
 - Each report, each probe request, and each probe result carries one more value. Each stored state has one more field of 19 characters.
 - The fingerprint does not contain the classifier. Two instances with different classifiers have the same fingerprint.
@@ -65,6 +68,6 @@ Negative:
 
 ## Examine again when
 
-- The events and logs of a rolling deployment are too many for operators. A possible change is to end the condition only after a number of responses without a different fingerprint.
+- The condition still starts and ends many times in real fleets. A possible change is a larger number of responses or a time limit in place of a count.
 - Operators need the list of the instances that have a different configuration, not only the fact that a difference exists.
 - A value moves between the group of shared values and the group of local values. That change needs a new version of the format.
