@@ -194,8 +194,8 @@ func (b *Breaker) synchronize(ctx context.Context) {
 	var err error
 	if c := b.pending.take(); c.zero() {
 		snapshot, err = b.cfg.store.Load(ctx, b.name)
-	} else {
-		snapshot, err = b.cfg.store.Report(ctx, b.name, b.report(v.generation, c))
+	} else if snapshot, err = b.cfg.store.Report(ctx, b.name, b.report(v.generation, c)); err != nil {
+		b.pending.restore(c)
 	}
 	if err == nil {
 		snapshot, err = b.restoreIfLost(ctx, snapshot)
