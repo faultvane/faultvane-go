@@ -95,20 +95,43 @@ The error in time is at most one sync interval.
 For this reason, the bucket duration must be equal to or longer than the sync interval.
 The configuration validation checks this rule.
 
-### Loss of a report
+### A failed report
 
 A report can fail, for example with a timeout.
 The instance then does not know if the store added the counts.
-The instance does not send the same counts again.
-A lost report makes the shared window smaller than the truth for a short time.
-A report that is counted two times can open a circuit for a healthy dependency. That error is worse.
 
-The local window still contains the counts.
-If the fault continues, the instance changes to local mode and uses the local window.
+The instance keeps the counts of a failed report (FD-9).
+It puts them back into the pending counts.
+The next synchronization sends them in one report, together with the new counts.
+A synchronization without pending counts reads the state and sends no report.
+[ADR 0010](../adr/0010-resend-failed-reports.md) records this decision.
 
-This rule applies to a report in distributed mode.
-The report of a reconciliation has a different rule (RC-7): the instance keeps the counts of a failed report and sends them again.
-[Degraded mode](degraded-mode.md) gives the rule and its limits.
+The reason is requirement FD-6.
+Without this rule, the failures of a failed report never reach the shared window.
+When the first reports of many instances fail, the circuit stays `CLOSED`, although the instances together have sufficient failures.
+A circuit that does not open is the worse error for a circuit breaker.
+A circuit that opens too early closes after one successful probe.
+
+The rule has three limits.
+
+1. **The fault threshold.** Each failed report is a store fault. After 3 store faults in sequence, the instance changes to local mode. The option `WithFaultThreshold` sets this number. The kept counts are then the pending counts of local mode. The reconciliation sends them with its limit: the totals that are still in the last local `CLOSED` window. [Degraded mode](degraded-mode.md) gives the rules.
+2. **The generation.** The next report carries the generation of the snapshot of the instance. The kept counts are from calls of that generation. When the store made a transition in the meantime, the store ignores the report (GEN-3). When the instance adopts a different generation, it discards its pending counts. A count never goes into a report with a newer generation.
+3. **The window.** The counts are in the shared window for one window size, as each other count.
+
+### Counts that the store adds more than one time
+
+The store can add the counts of a report and the response can fail to arrive.
+The next report then adds the same counts again. The store cannot identify them.
+
+- With the default fault threshold of 3, the store adds one result at most 3 times before the instance is in local mode: one time for each failed report.
+- The reconciliation then sends the counts one more time, with its limit. The total is then 4. Each response of a reconciliation that does not arrive adds one more time. The interval between health checks and the local window limit this number.
+- The failure count threshold and the minimum number of calls are reached earlier. Example: the failure threshold is 5 and an instance has 2 failures. After 3 reports without a response, the shared window has 6 failures from this instance, and the circuit opens.
+- A rate does not change when the store adds the calls and the failures of one instance more than one time.
+- When a report opens the circuit, the generation changes. The store ignores each later report with the old generation.
+- The counts that are too high leave the shared window after one window size.
+- The error occurs only when the store applies a report and the instance gets no response. A report that the store did not apply adds nothing.
+
+The local window is not affected. It contains each result one time.
 
 ## 6. Configuration differences between instances
 
