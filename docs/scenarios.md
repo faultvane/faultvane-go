@@ -131,7 +131,7 @@ On a GitHub runner with 4 cores and 1 worker in each pod, the same scenario gave
 |---|---|
 | The rate limiter rejected a few calls with a full bucket under parallel load. A goroutine read the clock, then a different goroutine refilled the bucket with a later time. The first goroutine then calculated a negative refill. | The limiter now uses 0 for a negative elapsed time. A regression test covers it. |
 | On a runner with 4 cores, 40 workers used all processor time. Store operations of the pods then took longer than a store timeout of 80 ms, and a pod changed to local mode. The breaker behaved correctly, but the scenario was not realistic. | The load scenario now uses the default sync interval and a number of workers that fits the machine. It also fails when a pod changes to local mode. |
-| With MongoDB, the first reports of all pods timed out, because the first write created the collection. The breaker does not send a failed report again, so the circuit did not open. | The pod now calls `EnsureIndexes` at setup, as the adapter document says. The adapter document states that this call is necessary before traffic. |
+| With MongoDB, the first reports of all pods timed out, because the first write created the collection. At that time, the breaker did not send a failed report again, so the circuit did not open. | The pod now calls `EnsureIndexes` at setup, as the adapter document says. The adapter document states that this call is necessary before traffic. The breaker now also sends the counts of a failed report with the next report (FD-9, [ADR 0010](adr/0010-resend-failed-reports.md)). |
 
 ## 7. Limits
 

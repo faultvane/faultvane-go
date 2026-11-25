@@ -54,7 +54,7 @@ These criteria apply to each milestone from M1.
 |---|---|
 | All quality gates of [testing.md](testing.md) section 1 pass. | The active gates pass in continuous integration. The benchmark comparison is not active. |
 | The statement coverage is 98% or more for each module and 95% or more for each package (QA-1, QA-2). | Continuous integration enforces it for the core module, the three adapter modules, and the `otel` module. |
-| Each requirement that the milestone names has a test with its identifier (QA-5). | 301 of the 317 requirements are in `scripts/implemented-requirements.txt`, and each has a test. The other 16 are requirements about the process, the documentation, or performance targets: QA-1 to QA-7, QA-10 to QA-12, QA-14, SEC-2, TK-4, and TK-51 to TK-53. No test names them. |
+| Each requirement that the milestone names has a test with its identifier (QA-5). | 302 of the 318 requirements are in `scripts/implemented-requirements.txt`, and each has a test. The other 16 are requirements about the process, the documentation, or performance targets: QA-1 to QA-7, QA-10 to QA-12, QA-14, SEC-2, TK-4, and TK-51 to TK-53. No test names them. |
 | Each scenario that the design documents of the milestone describe has a test. | Not verified for each scenario. The tests of each milestone exist. |
 | The mutation score of the critical packages that the milestone changes is 90% or more (QA-9). | The mutation gate measures it each day for the seven policy packages. [Testing](testing.md) section 2 records the result. |
 
@@ -329,7 +329,7 @@ Result:
 | Examples in the documents | Requirement QA-13 is satisfied by the three example programs. No test compiles each code block of the documents. |
 | Documentation comments | The exported names have no documentation comments, because the project forbids comments in code. The package pages of the Go documentation site then show only the signatures. |
 | Tests of the adapters | The system benchmark does not run with the SQL adapter and the MongoDB adapter. The Redis adapter has no separate AT-5 test. No test restarts a real store. The Redis tests use a cluster of 3 primary nodes without replicas, with one slot move. No test uses a failover, Redis Sentinel, or a MongoDB replica set. |
-| Counts of a failed report | A failed report in distributed mode is not sent again, so the failures of the first moments of a store outage do not reach the shared window. A failed report of a reconciliation is sent again (RC-7). If the store applied that report but its response was lost, the counts of one local window count two times. An idempotency key in the report removes both limits, but it changes the store contract. |
+| Counts of a failed report | A failed report is sent again, in distributed mode (FD-9) and in a reconciliation (RC-7). If the store applied a report but its response did not arrive, the store adds the same counts again with the next report. With the default fault threshold, the store adds one result at most 3 times before the instance is in local mode, and one more time for each report of a reconciliation. A failure count threshold and the minimum number of calls are then reached too early. An idempotency key in the report removes this limit, but it changes the store contract and all adapters. See [ADR 0010](adr/0010-resend-failed-reports.md). |
 
 ## 6. Definition of done for the distributed circuit breaker
 

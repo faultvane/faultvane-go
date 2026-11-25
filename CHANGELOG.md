@@ -19,6 +19,12 @@ The shared rate limit and the transition notifications stay experimental.
 ### Fixed
 
 - Circuit breaker: the counts of a failed reconciliation report are sent again with the next reconciliation (RC-7). The state after a store outage no longer depends on the delivery of one report.
+- Circuit breaker: the counts of a failed report in distributed mode are no longer lost (FD-9). Before, the shared circuit stayed closed when the first reports of many instances passed the store timeout, although the instances together had sufficient failures.
+- Circuit breaker: a result that an instance records during a report no longer counts for a newer generation that the response of that report brings (GEN-3).
+
+### Changed
+
+- Circuit breaker: an instance in distributed mode now sends the counts of a failed report again with its next report. When the store applied a report and the response did not arrive, the store adds the same counts again. With the default fault threshold of 3, the store adds one result at most 3 times before the instance changes to local mode. A failure count threshold and the minimum number of calls can then be reached too early. See [ADR 0010](docs/adr/0010-resend-failed-reports.md).
 
 ## [0.1.0] - 2026-11-24
 

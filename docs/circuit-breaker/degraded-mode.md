@@ -44,6 +44,7 @@ When the instance enters local mode, its local state starts from the last snapsh
 
 The local window already contains the recent calls of the instance, because the request path always writes to it.
 The change to local mode loses no local data.
+The pending counts stay also. They contain the counts of the reports that failed before the change (FD-9). Section 5 describes how the reconciliation sends them.
 
 ### A probe that holds a lease from the store
 
@@ -162,7 +163,9 @@ Rule 6 has a cost. The instance does not know if the store added the counts of a
 - When the first report opened the circuit, the generation changed. The instance then discards its counts and sends no second report. The store also ignores a report with an old generation.
 - A rate does not change when the calls and the failures of one instance are counted two times. The failure count and the minimum number of calls are reached earlier.
 
-A report in distributed mode keeps its rule: the instance does not send it again. [Failure detection](failure-detection.md) gives the reason. In distributed mode, a report that is counted two times can open the circuit of a healthy dependency at each sync interval, and the local window does not limit it.
+A failed report in distributed mode has the same rule (FD-9): the instance keeps the counts and sends them with the next report. [Failure detection](failure-detection.md) gives the rule and its limits. The fault threshold limits the number of these reports. When the instance changes to local mode, the kept counts are a part of its pending counts. Rule 3 then applies to them, with the same limit as for each other pending count. They are not lost, and they are not sent without the limit.
+
+Example with the default fault threshold of 3: an instance has 4 failures and its next 3 reports fail. The instance changes to local mode with 4 pending failures. At the reconciliation, the 4 failures are still in the local window, and the instance sends them. When the window size passed in the meantime, the instance sends nothing.
 
 ### Examples
 
