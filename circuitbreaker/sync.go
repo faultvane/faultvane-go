@@ -85,6 +85,7 @@ func (b *Breaker) adopt(snapshot Snapshot) {
 	previous := b.current.Load()
 	fresh := previous == nil || previous.local || !b.hasAuth || snapshot.Generation != b.auth.Generation || snapshot.State != previous.state
 	wasLocal := previous != nil && previous.local
+	newGeneration := snapshot.Generation != b.auth.Generation
 	b.auth, b.hasAuth = snapshot, true
 	b.compareConfig(snapshot)
 	if !fresh {
@@ -96,6 +97,9 @@ func (b *Breaker) adopt(snapshot Snapshot) {
 		v.window = b.newWindow()
 	}
 	b.publish(v)
+	if newGeneration {
+		b.pending.take()
+	}
 	if wasLocal {
 		b.counters.localModeExpired.Store(false)
 		b.emit(Event{Kind: ModeChanged, From: previous.state, To: v.state, Generation: v.generation, Mode: Distributed})

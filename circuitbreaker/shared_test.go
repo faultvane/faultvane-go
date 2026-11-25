@@ -510,6 +510,66 @@ func TestKeptCounts(t *testing.T) {
 		f.assertAll(Closed, Distributed)
 	})
 
+	t.Run("FD-9 GEN-3 kept counts do not reach a newer generation that a late probe result response brings", func(t *testing.T) {
+		f := newFleet(t, 2, WithHalfOpenSuccessThreshold(2))
+		f.openAll()
+		f.clock.Advance(testOpenDuration)
+		late, err := f.breakers[0].Allow(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.clock.Advance(testLease)
+		runTimes(t, f.breakers[1], 2, nil)
+		f.assertStored(Closed, 3)
+		f.sync(0)
+		f.fail(0, 4)
+		f.stores[0].down.Store(true)
+		f.sync(0)
+		f.stores[0].down.Store(false)
+		f.fail(1, 5)
+		f.sync(1)
+		f.assertStored(Open, 4)
+		f.clock.Advance(testOpenDuration)
+		late.Success()
+		runTimes(t, f.breakers[0], 2, nil)
+		f.assertStored(Closed, 6)
+		f.sync(0)
+		if stored := f.stored(); stored.State != Closed || stored.Generation != 6 || len(stored.Buckets) != 0 {
+			t.Fatalf("store = %+v, want closed generation 6 with an empty window", stored)
+		}
+	})
+
+	t.Run("GEN-3 a result that arrives during a report does not count for the newer generation of the response", func(t *testing.T) {
+		f := newFleet(t, 0)
+		store := f.addWithReportLog()
+		f.add()
+		f.openAllFrom(1)
+		f.clock.Advance(testOpenDuration)
+		runTimes(t, f.breakers[1], 1, nil)
+		f.assertStored(Closed, 3)
+		f.fail(0, 1)
+		store.during = func() { f.fail(0, 1) }
+		f.sync(0)
+		store.during = nil
+		f.sync(0)
+		if stored := f.stored(); len(store.reports) != 1 || stored.Generation != 3 || len(stored.Buckets) != 0 {
+			t.Fatalf("reports = %+v, store = %+v, want 1 report and closed generation 3 with an empty window", store.reports, stored)
+		}
+	})
+
+	t.Run("FD-6 GEN-1 a result that arrives during a report counts when the generation of the response is the same", func(t *testing.T) {
+		f := newFleet(t, 0)
+		store := f.addWithReportLog()
+		f.fail(0, 1)
+		store.during = func() { f.fail(0, 1) }
+		f.sync()
+		store.during = nil
+		f.sync()
+		if bucket := f.stored().Buckets[0]; bucket.Calls != 2 || bucket.Failures != 2 {
+			t.Fatalf("shared window = %+v, want 2 failures", bucket)
+		}
+	})
+
 	t.Run("FD-9 DG-2 RC-4 kept counts reach the store through the reconciliation", func(t *testing.T) {
 		f := newFleet(t, 0, WithFailureThreshold(100), WithLocalFailureThreshold(100))
 		store := f.addWithReportLog()
