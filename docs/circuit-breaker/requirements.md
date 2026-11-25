@@ -87,6 +87,7 @@ The library does not trade the correctness of the shared state for more availabi
 | FD-6 | The circuit opens when the instances together reach the threshold. One instance does not have to reach it alone. |
 | FD-7 | The library does not send each call result to the store as a separate operation. |
 | FD-8 | An instance detects that the last writer of the shared state has a different configuration for the same breaker. The detection changes no permit decision and adds no cost to a call. |
+| FD-9 | When a report fails in distributed mode, the instance keeps the counts of that report and sends them with the next report. The fault threshold limits the number of reports that fail in sequence. The instance discards its pending counts when it adopts a different generation. |
 
 ### Half-open coordination
 
@@ -121,7 +122,7 @@ The library does not trade the correctness of the shared state for more availabi
 | RC-4 | After recovery, all instances converge to one state. The result is deterministic. |
 | RC-5 | Recovery does not cause unnecessary state changes. |
 | RC-6 | An instance that starts does not assume `CLOSED` before it reads the authoritative state or applies the configured start policy. |
-| RC-7 | When the report of a reconciliation fails, the instance stays in local mode and keeps the counts of that report. The instance sends the counts again with the next reconciliation, with the same limits. A failed report in distributed mode is not sent again. |
+| RC-7 | When the report of a reconciliation fails, the instance stays in local mode and keeps the counts of that report. The instance sends the counts again with the next reconciliation, with the same limits. FD-9 gives the rule for a failed report in distributed mode. |
 
 ### Store faults
 
