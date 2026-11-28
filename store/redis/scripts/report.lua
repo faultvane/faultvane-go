@@ -1,8 +1,11 @@
 local now = now_us()
 local s = load(KEYS[1])
-if s.st == 0 and s.gen == tonumber(ARGV[1]) then
-  local epoch = math.floor(now / tonumber(ARGV[9]))
-  local oldest = epoch - tonumber(ARGV[10]) + 1
+local epoch = math.floor(now / tonumber(ARGV[9]))
+local oldest = epoch - tonumber(ARGV[10]) + 1
+local sequence = tonumber(ARGV[15])
+local applied_epoch, applied = string.match(sequence > 0 and redis.call('HGET', KEYS[4], ARGV[14]) or '', '^(%d+):(%d+)$')
+local repeated = applied and tonumber(applied_epoch) >= oldest and tonumber(applied) >= sequence
+if s.st == 0 and s.gen == tonumber(ARGV[1]) and not repeated then
   local calls, failures, slow = tonumber(ARGV[2]), tonumber(ARGV[3]), tonumber(ARGV[4])
   local all = redis.call('HGETALL', KEYS[2])
   for i = 1, #all, 2 do
@@ -18,6 +21,17 @@ if s.st == 0 and s.gen == tonumber(ARGV[1]) then
     end
   end
   local field = number(epoch)
+  if redis.call('HEXISTS', KEYS[2], field .. ':c') == 0 then
+    local reporters = redis.call('HGETALL', KEYS[4])
+    for i = 1, #reporters, 2 do
+      if tonumber(string.match(reporters[i + 1], '^(%d+):')) < oldest then
+        redis.call('HDEL', KEYS[4], reporters[i])
+      end
+    end
+  end
+  if sequence > 0 then
+    redis.call('HSET', KEYS[4], ARGV[14], field .. ':' .. ARGV[15])
+  end
   redis.call('HINCRBY', KEYS[2], field .. ':c', ARGV[2])
   redis.call('HINCRBY', KEYS[2], field .. ':f', ARGV[3])
   redis.call('HINCRBY', KEYS[2], field .. ':s', ARGV[4])
