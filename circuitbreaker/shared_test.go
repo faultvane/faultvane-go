@@ -595,6 +595,26 @@ func TestKeptCounts(t *testing.T) {
 		}
 	})
 
+	t.Run("FD-9 RC-7 the reconciliation sends the kept report first and the results of local mode with the next synchronization", func(t *testing.T) {
+		f := newFleet(t, 0, WithFailureThreshold(100), WithLocalFailureThreshold(100))
+		store := f.addWithReportLog()
+		f.fail(0, 4)
+		f.disconnect(0)
+		f.fail(0, 2)
+		f.connect(0)
+		f.sync()
+		if bucket := f.stored().Buckets[0]; bucket.Failures != 4 || f.breakers[0].Mode() != Distributed {
+			t.Fatalf("shared window = %+v in %v mode, want the 4 kept failures in distributed mode", bucket, f.breakers[0].Mode())
+		}
+		f.sync()
+		if bucket := f.stored().Buckets[0]; bucket.Calls != 6 || bucket.Failures != 6 {
+			t.Fatalf("shared window = %+v, want the 4 kept failures and the 2 failures of local mode", bucket)
+		}
+		if last := store.reports[len(store.reports)-1]; last.Failures != 2 || last.Sequence != store.reports[0].Sequence+1 {
+			t.Fatalf("last report = %+v, want 2 failures with the next sequence", last)
+		}
+	})
+
 	t.Run("FD-9 RC-5 kept counts that left the local window are not sent by the reconciliation", func(t *testing.T) {
 		f := newFleet(t, 1, WithFailureThreshold(100), WithLocalFailureThreshold(100))
 		f.fail(0, 4)
