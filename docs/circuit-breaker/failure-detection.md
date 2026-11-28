@@ -71,11 +71,12 @@ The pending counts are the results that the instance did not send to the store y
 The synchronizer sends the pending counts as a report:
 
 ```text
-Report(generation, calls, failures, slowCalls, thresholds, windowSize, windowBuckets, openDuration, stateTTL, fingerprint)
+Report(generation, instance, sequence, calls, failures, slowCalls, thresholds, windowSize, windowBuckets, openDuration, stateTTL, fingerprint)
 ```
 
 The report carries the thresholds and the window settings of the instance that sends it. The store keeps no configuration.
 The report also carries the configuration fingerprint of the instance. Section 6 describes it.
+The instance number and the sequence number are the identity of the report. The section "A failed report" describes them.
 
 The store handles a report in one atomic operation.
 The [store contract](../stores/README.md) defines this operation for all adapters.
@@ -100,36 +101,39 @@ The configuration validation checks this rule.
 A report can fail, for example with a timeout.
 The instance then does not know if the store added the counts.
 
-The instance keeps the counts of a failed report (FD-9).
-It puts them back into the pending counts.
-The next synchronization sends them in one report, together with the new counts.
-A synchronization without pending counts reads the state and sends no report.
-[ADR 0010](../adr/0010-resend-failed-reports.md) records this decision.
+The instance keeps a failed report (FD-9). This is the **unconfirmed report**.
+The next synchronization sends the unconfirmed report again, without a change: the same counts, the same generation, and the same identity.
+It sends no other report. New results stay in the pending counts.
+When the store confirms the unconfirmed report, the synchronizer gets the signal for an early report. The next synchronization then sends the pending counts.
+A synchronization without an unconfirmed report and without pending counts reads the state and sends no report.
+[ADR 0010](../adr/0010-resend-failed-reports.md) and [ADR 0011](../adr/0011-report-identity.md) record these decisions.
 
 The reason is requirement FD-6.
 Without this rule, the failures of a failed report never reach the shared window.
 When the first reports of many instances fail, the circuit stays `CLOSED`, although the instances together have sufficient failures.
 A circuit that does not open is the worse error for a circuit breaker.
-A circuit that opens too early closes after one successful probe.
 
 The rule has three limits.
 
-1. **The fault threshold.** Each failed report is a store fault. After 3 store faults in sequence, the instance changes to local mode. The option `WithFaultThreshold` sets this number. The kept counts are then the pending counts of local mode. The reconciliation sends them with its limit: the totals that are still in the last local `CLOSED` window. [Degraded mode](degraded-mode.md) gives the rules.
-2. **The generation.** The next report carries the generation of the snapshot of the instance. The kept counts are from calls of that generation. When the store made a transition in the meantime, the store ignores the report (GEN-3). When the instance adopts a different generation, it discards its pending counts. A count never goes into a report with a newer generation.
-3. **The window.** The counts are in the shared window for one window size, as each other count.
+1. **The fault threshold.** Each failed report is a store fault. After 3 store faults in sequence, the instance changes to local mode. The option `WithFaultThreshold` sets this number. The instance keeps the unconfirmed report in local mode. The reconciliation sends it again. [Degraded mode](degraded-mode.md) gives the rules.
+2. **The generation.** The unconfirmed report carries the generation of the snapshot that the instance had when it made the report. When the store made a transition in the meantime, the store ignores the report (GEN-3). When the instance adopts a different generation, it discards its pending counts and the unconfirmed report. A count never goes into a report with a newer generation.
+3. **The window.** The instance discards an unconfirmed report that is as old as the window size. The counts of a report are in the shared window for one window size, as each other count.
 
-### Counts that the store adds more than one time
+### The identity of a report
 
 The store can add the counts of a report and the response can fail to arrive.
-The next report then adds the same counts again. The store cannot identify them.
+The instance then sends the same report again. The store must not add the counts a second time (FD-10).
 
-- With the default fault threshold of 3, the store adds one result at most 3 times before the instance is in local mode: one time for each failed report.
-- The reconciliation then sends the counts one more time, with its limit. The total is then 4. Each response of a reconciliation that does not arrive adds one more time. The interval between health checks and the local window limit this number.
-- The failure count threshold and the minimum number of calls are reached earlier. Example: the failure threshold is 5 and an instance has 2 failures. After 3 reports without a response, the shared window has 6 failures from this instance, and the circuit opens.
-- A rate does not change when the store adds the calls and the failures of one instance more than one time.
-- When a report opens the circuit, the generation changes. The store ignores each later report with the old generation.
-- The counts that are too high leave the shared window after one window size.
-- The error occurs only when the store applies a report and the instance gets no response. A report that the store did not apply adds nothing.
+- Each report carries the number of its instance and a sequence number. The instance number is a random 64-bit number that the breaker selects when it starts. The sequence starts at 1 and increases by 1 for each new report.
+- A report that is sent again has the same sequence.
+- For each instance, the store keeps the sequence of the last report that it applied. A report with a sequence that is equal to or lower than this value changes nothing. Rule C14 of the [store contract](../stores/README.md) states this.
+- The store forgets an instance when the counts of its last report left the shared window. A transition removes all instances, together with the window.
+- All adapters of this project satisfy rule C14. A result then reaches the shared window at most one time.
+
+A store from a different source that ignores the identity adds the counts again with each report that is sent again.
+With the default fault threshold of 3, such a store adds one result at most 3 times before the instance is in local mode, and one more time for each report of a reconciliation whose response does not arrive.
+A failure count threshold and the minimum number of calls are then reached too early.
+An instance of version 0.2.0 or older sends no identity. During a deployment with mixed versions, this limit stays for the old instances. [ADR 0011](../adr/0011-report-identity.md) gives the details.
 
 The local window is not affected. It contains each result one time.
 

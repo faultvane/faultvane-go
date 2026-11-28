@@ -78,8 +78,9 @@ CREATE TABLE IF NOT EXISTS faultvane_circuit_breakers (
 | `record` | The `circuitbreaker.Record` of the breaker as JSON text. |
 | `expires_at` | The time after which the cleanup can delete the row. It is the database time in microseconds since the Unix epoch. |
 
-The record contains the state, the generation, the transition time, the open duration, the number of probe successes, the leases, the window buckets, and the configuration fingerprint of the last writer.
-The JSON field names are the names of the Go fields, for example `State`, `Generation`, `Leases`, `Buckets`, and `Fingerprint`.
+The record contains the state, the generation, the transition time, the open duration, the number of probe successes, the leases, the window buckets, the last report of each instance, and the configuration fingerprint of the last writer.
+The JSON field names are the names of the Go fields, for example `State`, `Generation`, `Leases`, `Buckets`, `Reporters`, and `Fingerprint`.
+A record without the field `Reporters` is valid. A row from before the report identity needs no migration. An instance of version 0.2.0 or older writes the record without this field. See [ADR 0011](../adr/0011-report-identity.md).
 A record without the field `Fingerprint` is valid. Its fingerprint is the empty text. A row from before the fingerprint needs no migration.
 A new row has the record `{}`. That is `CLOSED` with generation 0.
 The row has no schema version column.
@@ -120,6 +121,7 @@ Each write operation writes the row and sets `expires_at`, also when the record 
 | C11 Data loss is visible | A row that does not exist gives `CLOSED` with generation 0. |
 | C12 No side effects | The adapter starts no goroutine and has no lock in the process. The row lock is in the database and ends with the transaction. |
 | C13 Fingerprint | The field `Fingerprint` of the record. The method `Record.Apply` gives the response with the fingerprint from before the operation. |
+| C14 Report identity | The field `Reporters` of the record. The method `Record.Report` contains the rule. |
 
 The adapter passes the conformance suite with PostgreSQL and with MySQL.
 

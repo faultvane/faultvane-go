@@ -82,7 +82,7 @@ Rules for an adapter:
 - `Subscribe` obeys its context and returns quickly. The context applies only to the start of the subscription.
 - `changed` can run in each goroutine. It does not block.
 - After `stop` returns, the adapter does not call `changed` again and holds no goroutine and no connection for the subscription.
-- A notification carries no state. The contract rules C1 to C13 do not depend on it. An adapter that loses, delays, or repeats a notification is still correct.
+- A notification carries no state. The contract rules C1 to C14 do not depend on it. An adapter that loses, delays, or repeats a notification is still correct.
 - A wrapper around a store must pass `Subscribe` to the store. If it does not, the breaker gets no notifications and uses the sync interval only.
 
 The interface is not a part of `Store`. An adapter without it is complete.
@@ -137,12 +137,13 @@ An adapter must satisfy these rules.
 | C11 | **Data loss is visible.** After a loss of data, `Load` returns a lower generation or the initial state. The adapter does not hide the loss. |
 | C12 | **No side effects on the request path.** The adapter starts no goroutine for each call and holds no lock across a network call. |
 | C13 | **Fingerprint.** The data of a breaker contains one configuration fingerprint. `Report`, `AcquireProbe`, and `CompleteProbe` save the fingerprint of their argument when the store accepts the operation. An operation that the store ignores and `Restore` do not change the fingerprint. A transition keeps it. Each response contains the fingerprint that the store had before the operation. Data without a fingerprint gives the empty text. |
+| C14 | **Report identity.** A report with a sequence above 0 has an identity: its instance number and its sequence. For each instance number, the store keeps the highest sequence of the reports that it accepted. The store ignores a report whose sequence is equal to or lower than this value. The instance numbers are independent of each other. The store adds a report with the sequence 0 each time. The store can forget an instance number when the counts of its last report left the shared window. A transition and `Restore` can remove all instance numbers. |
 
 For rule C13, the store accepts an operation in these conditions:
 
 | Operation | Condition |
 |---|---|
-| `Report` | The state is `CLOSED` and the generation of the report is equal to the stored generation. |
+| `Report` | The state is `CLOSED`, the generation of the report is equal to the stored generation, and rule C14 does not ignore the report. |
 | `AcquireProbe` | The state after the operation is `HALF_OPEN`. The store saves the fingerprint also when it grants no lease. |
 | `CompleteProbe` | The state is `HALF_OPEN` and the generation of the result is equal to the stored generation. The store saves the fingerprint also when the token has no valid lease. |
 
