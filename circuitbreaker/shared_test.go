@@ -395,6 +395,7 @@ func TestSharedState(t *testing.T) {
 		}
 		f.stores[0].down.Store(false)
 		f.fail(0, 1)
+		<-f.breakers[0].wake
 		before := f.stores[0].operations.Load()
 		f.sync()
 		if got := f.stores[0].operations.Load(); got != before+1 {
@@ -451,6 +452,20 @@ func TestKeptCounts(t *testing.T) {
 		f.sync()
 		if bucket := f.stored().Buckets[0]; bucket.Calls != 1 || bucket.Failures != 0 || bucket.SlowCalls != 1 {
 			t.Fatalf("shared window = %+v, want 1 call that is slow", bucket)
+		}
+		if len(f.breakers[0].wake) != 0 {
+			t.Fatal("the synchronizer got a signal for an early report without pending counts")
+		}
+	})
+
+	t.Run("FD-7 a report that is not sent again gives no signal for an early report", func(t *testing.T) {
+		f := newFleet(t, 0)
+		store := f.addWithReportLog()
+		runTimes(t, f.breakers[0], 1, nil)
+		store.during = func() { runTimes(t, f.breakers[0], 1, nil) }
+		f.sync()
+		if len(store.reports) != 1 || len(f.breakers[0].wake) != 0 {
+			t.Fatalf("reports = %d, signals = %d, want 1 and 0", len(store.reports), len(f.breakers[0].wake))
 		}
 	})
 

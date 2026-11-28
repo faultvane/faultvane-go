@@ -362,6 +362,11 @@ func TestReportIdentity(t *testing.T) {
 		}
 	})
 
+	t.Run("FD-10 the record keeps a reporter while its counts are in the oldest bucket of the window", func(t *testing.T) {
+		applied := Record{}.Report(testStart, identified(7, 1, 3))
+		assertUnchanged(t, applied, applied.Report(testStart.Add(9*time.Second), identified(7, 1, 3)))
+	})
+
 	t.Run("FD-10 the record forgets a reporter when its counts left the window", func(t *testing.T) {
 		r := Record{}.Report(testStart, identified(7, 1, 3))
 		r = r.Report(testStart.Add(10*time.Second), identified(8, 1, 1))
