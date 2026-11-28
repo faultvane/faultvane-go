@@ -87,7 +87,8 @@ The library does not trade the correctness of the shared state for more availabi
 | FD-6 | The circuit opens when the instances together reach the threshold. One instance does not have to reach it alone. |
 | FD-7 | The library does not send each call result to the store as a separate operation. |
 | FD-8 | An instance detects that the last writer of the shared state has a different configuration for the same breaker. The detection changes no permit decision and adds no cost to a call. |
-| FD-9 | When a report fails in distributed mode, the instance keeps the counts of that report and sends them with the next report. The fault threshold limits the number of reports that fail in sequence. The instance discards its pending counts when it adopts a different generation. |
+| FD-9 | When a report fails in distributed mode, the instance keeps that report and sends it again with the next synchronization, without a change. The fault threshold limits the number of reports that fail in sequence. The instance discards its pending counts when it adopts a different generation. It discards a kept report that has a different generation or that is as old as the window size. |
+| FD-10 | Each report carries the number of its instance and a sequence number. A store that satisfies rule C14 of the store contract adds the counts of one report to the shared window at most one time, also when the instance sends the report again. |
 
 ### Half-open coordination
 
@@ -122,7 +123,7 @@ The library does not trade the correctness of the shared state for more availabi
 | RC-4 | After recovery, all instances converge to one state. The result is deterministic. |
 | RC-5 | Recovery does not cause unnecessary state changes. |
 | RC-6 | An instance that starts does not assume `CLOSED` before it reads the authoritative state or applies the configured start policy. |
-| RC-7 | When the report of a reconciliation fails, the instance stays in local mode and keeps the counts of that report. The instance sends the counts again with the next reconciliation, with the same limits. FD-9 gives the rule for a failed report in distributed mode. |
+| RC-7 | When the report of a reconciliation fails, the instance stays in local mode and keeps that report. The instance sends the report again with the next reconciliation, without a change. It does not send a report that is as old as the window size. FD-9 gives the rule for a failed report in distributed mode. |
 
 ### Store faults
 
