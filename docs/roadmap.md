@@ -5,7 +5,7 @@ The toolkit contains seven policies. The circuit breaker was the first, because 
 Each milestone has a scope and exit criteria.
 
 Status on 2026-11-24: the code of all milestones M1 to M12 is implemented and merged.
-The first release is version 0.1.0. The current release is version 0.2.0.
+The first release is version 0.1.0. The current release is version 0.3.0.
 Some exit criteria are not satisfied. Each milestone below gives its real result, and section 5 lists the open items.
 
 The identifiers refer to the [toolkit requirements](requirements.md) and the [circuit breaker requirements](circuit-breaker/requirements.md).

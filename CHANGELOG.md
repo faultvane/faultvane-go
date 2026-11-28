@@ -6,6 +6,11 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-28
+
+The shared rate limit and the transition notifications stay experimental.
+Old and new versions can use the same store during a deployment. See [ADR 0011](docs/adr/0011-report-identity.md), section "Mixed versions during a deployment".
+
 ### Added
 
 - Circuit breaker: each report carries an identity, the new fields `Instance` and `Sequence` of `circuitbreaker.Report` (FD-10). A store adds the counts of one report to the shared window at most one time, also when the response did not arrive and the instance sends the report again. This removes the limit of version 0.2.0, in which the store added one result up to 3 times. See [ADR 0011](docs/adr/0011-report-identity.md).
