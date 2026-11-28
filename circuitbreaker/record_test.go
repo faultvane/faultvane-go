@@ -306,3 +306,75 @@ func TestMachineInvariants(t *testing.T) {
 		t.Fatalf("the random sequences made the transitions %v, want all four", visited)
 	}
 }
+
+func identified(instance, sequence uint64, failures int64) Report {
+	return Report{
+		Instance:      instance,
+		Sequence:      sequence,
+		Calls:         failures,
+		Failures:      failures,
+		Thresholds:    Thresholds{FailureThreshold: 100, MinimumCalls: 1 << 40},
+		WindowSize:    10 * time.Second,
+		WindowBuckets: 10,
+		OpenDuration:  testOpenDuration,
+	}
+}
+
+func windowFailures(r Record) int64 {
+	var failures int64
+	for _, b := range r.Buckets {
+		failures += b.Failures
+	}
+	return failures
+}
+
+func TestReportIdentity(t *testing.T) {
+	t.Run("FD-10 a report that the record applied before adds nothing", func(t *testing.T) {
+		applied := Record{}.Report(testStart, identified(7, 1, 3))
+		again := applied.Report(testStart.Add(time.Second), identified(7, 1, 3))
+		assertUnchanged(t, applied, again)
+	})
+
+	t.Run("FD-10 a late report with a lower sequence adds nothing", func(t *testing.T) {
+		applied := Record{}.Report(testStart, identified(7, 1, 3)).Report(testStart, identified(7, 2, 1))
+		assertUnchanged(t, applied, applied.Report(testStart, identified(7, 1, 3)))
+	})
+
+	t.Run("FD-10 the next sequence of the same instance adds its counts", func(t *testing.T) {
+		r := Record{}.Report(testStart, identified(7, 1, 3)).Report(testStart, identified(7, 2, 1))
+		if got := windowFailures(r); got != 4 || len(r.Reporters) != 1 || r.Reporters[0].Sequence != 2 {
+			t.Fatalf("failures = %d, reporters = %+v, want 4 failures and one reporter with sequence 2", got, r.Reporters)
+		}
+	})
+
+	t.Run("FD-10 two instances with the same sequence add their counts", func(t *testing.T) {
+		r := Record{}.Report(testStart, identified(7, 1, 3)).Report(testStart, identified(8, 1, 2))
+		if got := windowFailures(r); got != 5 || len(r.Reporters) != 2 {
+			t.Fatalf("failures = %d, reporters = %+v, want 5 failures and two reporters", got, r.Reporters)
+		}
+	})
+
+	t.Run("FD-10 a report without a sequence is added each time and keeps the reporters", func(t *testing.T) {
+		r := Record{}.Report(testStart, identified(0, 1, 1))
+		r = r.Report(testStart, identified(0, 0, 3)).Report(testStart, identified(0, 0, 3))
+		if got := windowFailures(r); got != 7 || len(r.Reporters) != 1 {
+			t.Fatalf("failures = %d, reporters = %+v, want 7 failures and one reporter", got, r.Reporters)
+		}
+	})
+
+	t.Run("FD-10 the record forgets a reporter when its counts left the window", func(t *testing.T) {
+		r := Record{}.Report(testStart, identified(7, 1, 3))
+		r = r.Report(testStart.Add(10*time.Second), identified(8, 1, 1))
+		if len(r.Reporters) != 1 || r.Reporters[0].Instance != 8 {
+			t.Fatalf("reporters = %+v, want only instance 8", r.Reporters)
+		}
+	})
+
+	t.Run("FD-10 GEN-3 a transition removes the reporters", func(t *testing.T) {
+		report := identified(7, 1, 3)
+		report.Thresholds.FailureThreshold = 3
+		if r := (Record{}).Report(testStart, report); r.State != Open || len(r.Reporters) != 0 {
+			t.Fatalf("record = %+v, want open without reporters", r)
+		}
+	})
+}

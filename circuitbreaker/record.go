@@ -17,6 +17,12 @@ type Bucket struct {
 	SlowCalls int64
 }
 
+type Reporter struct {
+	Instance uint64
+	Sequence uint64
+	Epoch    int64
+}
+
 type Record struct {
 	State          State
 	Generation     uint64
@@ -25,6 +31,7 @@ type Record struct {
 	ProbeSuccesses int
 	Leases         []Lease
 	Buckets        []Bucket
+	Reporters      []Reporter
 	Fingerprint    string
 }
 
@@ -108,9 +115,23 @@ func (r Record) Report(now time.Time, report Report) Record {
 	if r.State != Closed || r.Generation != report.Generation {
 		return r
 	}
-	r.Fingerprint = report.Fingerprint
 	epoch := now.UnixNano() / int64(report.WindowSize/time.Duration(report.WindowBuckets))
 	oldest := epoch - int64(report.WindowBuckets) + 1
+	reporters := make([]Reporter, 0, len(r.Reporters)+1)
+	for _, p := range r.Reporters {
+		switch {
+		case p.Epoch < oldest:
+		case report.Sequence == 0 || p.Instance != report.Instance:
+			reporters = append(reporters, p)
+		case p.Sequence >= report.Sequence:
+			return r
+		}
+	}
+	if report.Sequence != 0 {
+		reporters = append(reporters, Reporter{Instance: report.Instance, Sequence: report.Sequence, Epoch: epoch})
+	}
+	r.Reporters = reporters
+	r.Fingerprint = report.Fingerprint
 	buckets := make([]Bucket, 0, len(r.Buckets)+1)
 	current := -1
 	var calls, failures, slowCalls int64

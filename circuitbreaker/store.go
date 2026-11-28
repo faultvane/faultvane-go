@@ -31,6 +31,8 @@ type Snapshot struct {
 
 type Report struct {
 	Generation    uint64
+	Instance      uint64
+	Sequence      uint64
 	Calls         int64
 	Failures      int64
 	SlowCalls     int64
