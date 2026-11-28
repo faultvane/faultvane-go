@@ -65,19 +65,20 @@ type dependency struct {
 	t       *testing.T
 	b       *Bulkhead
 	entered chan int
-	leave   chan struct{}
+	leave   map[<-chan error]chan struct{}
 }
 
 func newDependency(t *testing.T, b *Bulkhead) *dependency {
-	return &dependency{t: t, b: b, entered: make(chan int, 64), leave: make(chan struct{})}
+	return &dependency{t: t, b: b, entered: make(chan int, 64), leave: map[<-chan error]chan struct{}{}}
 }
 
 func (d *dependency) call(ctx context.Context, id int) <-chan error {
-	result := make(chan error, 1)
+	result, leave := make(chan error, 1), make(chan struct{})
+	d.leave[result] = leave
 	go func() {
 		result <- d.b.Do(ctx, func(context.Context) error {
 			d.entered <- id
-			<-d.leave
+			<-leave
 			return nil
 		})
 	}()
@@ -107,7 +108,7 @@ func (d *dependency) awaitEntry(id int) {
 
 func (d *dependency) finish(result <-chan error) {
 	d.t.Helper()
-	d.leave <- struct{}{}
+	close(d.leave[result])
 	if err := receive(d.t, "the call returns", result); err != nil {
 		d.t.Fatalf("Do() = %v, want nil", err)
 	}
