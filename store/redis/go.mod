@@ -3,7 +3,7 @@ module github.com/faultvane/faultvane-go/store/redis
 go 1.26.0
 
 require (
-	github.com/faultvane/faultvane-go v0.2.0
+	github.com/faultvane/faultvane-go v0.3.0
 	github.com/redis/go-redis/v9 v9.23.0
 )
 

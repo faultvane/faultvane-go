@@ -1,6 +1,6 @@
 # ADR 0011: A report has an identity, and the store applies it one time
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 
