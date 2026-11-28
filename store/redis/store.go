@@ -108,7 +108,7 @@ func (s *Store) base(name string) string {
 
 func (s *Store) keys(name string) []string {
 	base := s.base(name)
-	return []string{base + "state", base + "window", base + "probes"}
+	return []string{base + "state", base + "window", base + "probes", base + "reporters"}
 }
 
 func (s *Store) channel(name string) string {
@@ -210,6 +210,7 @@ func (s *Store) Report(ctx context.Context, name string, report circuitbreaker.R
 		strconv.FormatFloat(report.Thresholds.SlowCallRate, 'g', -1, 64),
 		micros(report.WindowSize/time.Duration(report.WindowBuckets)), report.WindowBuckets,
 		micros(report.OpenDuration), millis(report.StateTTL), report.Fingerprint,
+		strconv.FormatUint(report.Instance, 10), report.Sequence,
 	)
 	return snapshot, err
 }

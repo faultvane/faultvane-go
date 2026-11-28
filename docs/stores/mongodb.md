@@ -64,8 +64,9 @@ The adapter keeps one document for each breaker.
 | `expireAt` | Date | The time after which MongoDB can remove the document. |
 | `now` | Date | The MongoDB server time of the last read step of an operation. The adapter uses it as the store time. |
 
-The record contains the state, the generation, the transition time, the open duration, the number of probe successes, the leases, the window buckets, and the configuration fingerprint of the last writer.
-The JSON field names are the names of the Go fields, for example `State`, `Generation`, `Leases`, `Buckets`, and `Fingerprint`.
+The record contains the state, the generation, the transition time, the open duration, the number of probe successes, the leases, the window buckets, the last report of each instance, and the configuration fingerprint of the last writer.
+The JSON field names are the names of the Go fields, for example `State`, `Generation`, `Leases`, `Buckets`, `Reporters`, and `Fingerprint`.
+A record without the field `Reporters` is valid. A document from before the report identity needs no migration. An instance of version 0.2.0 or older writes the record without this field. See [ADR 0011](../adr/0011-report-identity.md).
 A record without the field `Fingerprint` is valid. Its fingerprint is the empty text. A document from before the fingerprint needs no migration.
 A new document has the record `{}` and the version 0. That is `CLOSED` with generation 0.
 The namespace and the name cannot contain the separator `:`, so two breakers cannot get the same `_id`.
@@ -106,6 +107,7 @@ The adapter uses no multi-document transaction. It does not need a replica set f
 | C11 Data loss is visible | A document that does not exist gives `CLOSED` with generation 0. |
 | C12 No side effects | The adapter has no goroutine, no lock, and no timer. |
 | C13 Fingerprint | The field `Fingerprint` of the record. The method `Record.Apply` gives the response with the fingerprint from before the operation. An attempt that loses the compare-and-set gives no response. |
+| C14 Report identity | The field `Reporters` of the record. The method `Record.Report` contains the rule. |
 
 The adapter passes the conformance suite with MongoDB.
 
@@ -132,7 +134,7 @@ The TTL monitor runs in the background at an interval. A document can stay for s
 The adapter has no cleanup of its own.
 
 Call `EnsureIndexes` one time when the application starts, or create the same index with your deployment tools.
-Do this before the application gets traffic. The call also creates the collection. Without it, the first write creates the collection, and that write can be slower than the store timeout. The breaker keeps the counts of a failed report and sends them with the next report (FD-9). But each failed report is a store fault, and 3 store faults in sequence start local mode.
+Do this before the application gets traffic. The call also creates the collection. Without it, the first write creates the collection, and that write can be slower than the store timeout. The breaker keeps a failed report and sends it again (FD-9). But each failed report is a store fault, and 3 store faults in sequence start local mode.
 
 ## 7. Measured latency
 

@@ -44,7 +44,7 @@ When the instance enters local mode, its local state starts from the last snapsh
 
 The local window already contains the recent calls of the instance, because the request path always writes to it.
 The change to local mode loses no local data.
-The pending counts stay also. They contain the counts of the reports that failed before the change (FD-9). Section 5 describes how the reconciliation sends them.
+The pending counts stay also. The report that failed before the change stays as the unconfirmed report (FD-9). Section 5 describes how the reconciliation sends them.
 
 ### A probe that holds a lease from the store
 
@@ -145,7 +145,8 @@ Rules:
 3. **The instance adds only evidence.** When the generation did not change and the authoritative state is `CLOSED`, the instance sends its pending counts. It limits each count to the total that is still in its last local `CLOSED` window. Older counts are not sent. This is a normal report. The store evaluates the failure condition on the sum of all reports. When the limited counts are 0, the instance sends no report.
 4. **Only a probe closes a circuit.** A local `CLOSED` state has no effect on an authoritative `OPEN` or `HALF_OPEN` state.
 5. **Only `Restore` writes a full state, and only an authoritative snapshot.** The store accepts it only when its generation is higher than the stored generation.
-6. **A failed report of a reconciliation is sent again (RC-7).** When the report of rule 3 fails, the instance stays in local mode and puts the counts of the report back into its pending counts. The next successful health check starts the reconciliation again. Rule 3 then applies again to the pending counts, with the same limits.
+6. **A failed report of a reconciliation is sent again (RC-7).** When the report of rule 3 fails, the instance stays in local mode and keeps the report as the unconfirmed report. The next successful health check starts the reconciliation again. This reconciliation sends the unconfirmed report again, without a change, and no other report. Rule 3 still gives the limit for the pending counts. They go with the next synchronization in distributed mode.
+7. **An unconfirmed report has a maximum age.** The instance discards an unconfirmed report that is as old as the window size, or that has a different generation than the authoritative state. It then applies rule 3 to the pending counts.
 
 ### A failed report of a reconciliation
 
@@ -154,18 +155,14 @@ The report can fail although the health check was successful.
 
 Without rule 6, the counts of that report are lost. The instance then adopts `CLOSED` at the next health check, although the instances together had sufficient failures. The state after the outage then depends on the delivery of one report. That is against requirement RC-4.
 
-Rule 6 has a cost. The instance does not know if the store added the counts of a failed report. When the store added them and the response did not arrive, the next report adds the same counts a second time.
+The instance does not know if the store added the counts of a failed report. For this reason, each report has an identity (FD-10): the number of the instance and a sequence number. The report that the instance sends again has the same identity. A store that applied the report before ignores it and returns the current state. The counts then reach the shared window one time.
 
-- The error is in the safe direction. The shared circuit can open too early. It cannot stay `CLOSED` because of lost counts. A circuit that opened too early closes after one successful probe.
-- Each report has the limit of rule 3. One report that is counted two times adds at most the totals of one local window of one instance. Example: an instance has 3 failures in its local window. The shared window then gets at most 6 failures from this instance, not 3.
-- Each more response that does not arrive adds the same limit one more time. The interval between health checks limits the number of reports in one window.
-- The counts that are too high leave the shared window after one window size.
 - When the first report opened the circuit, the generation changed. The instance then discards its counts and sends no second report. The store also ignores a report with an old generation.
-- A rate does not change when the calls and the failures of one instance are counted two times. The failure count and the minimum number of calls are reached earlier.
+- A store from a different source that ignores the identity adds the counts a second time. The error is then in the safe direction: the shared circuit can open too early, and it closes after one successful probe.
 
-A failed report in distributed mode has the same rule (FD-9): the instance keeps the counts and sends them with the next report. [Failure detection](failure-detection.md) gives the rule and its limits. The fault threshold limits the number of these reports. When the instance changes to local mode, the kept counts are a part of its pending counts. Rule 3 then applies to them, with the same limit as for each other pending count. They are not lost, and they are not sent without the limit.
+A failed report in distributed mode has the same rule (FD-9): the instance keeps the report and sends it again without a change. [Failure detection](failure-detection.md) gives the rule and its limits. The fault threshold limits the number of these reports. When the instance changes to local mode, it keeps the unconfirmed report. The reconciliation sends it again when it is not as old as the window size.
 
-Example with the default fault threshold of 3: an instance has 4 failures and its next 3 reports fail. The instance changes to local mode with 4 pending failures. At the reconciliation, the 4 failures are still in the local window, and the instance sends them. When the window size passed in the meantime, the instance sends nothing.
+Example with the default fault threshold of 3: an instance has 4 failures and its next 3 reports fail. The instance changes to local mode with an unconfirmed report of 4 failures. When the reconciliation starts before the window size passed, the instance sends the report again, and the store adds the 4 failures one time. When the window size passed in the meantime, the instance discards the report and sends nothing.
 
 ### Examples
 

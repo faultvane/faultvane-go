@@ -45,13 +45,14 @@ defer breaker.Close(ctx)
 
 ## 2. Keys
 
-Each breaker uses three keys:
+Each breaker uses four keys:
 
 | Key | Type | Content |
 |---|---|---|
 | `<prefix>:{<namespace>:<name>}:cb:state` | Hash | The authoritative state |
 | `<prefix>:{<namespace>:<name>}:cb:window` | Hash | The shared window |
 | `<prefix>:{<namespace>:<name>}:cb:probes` | Sorted set | The probe leases |
+| `<prefix>:{<namespace>:<name>}:cb:reporters` | Hash | The last report of each instance |
 
 Example with the default prefix:
 
@@ -59,13 +60,14 @@ Example with the default prefix:
 faultvane:{production:payment-service}:cb:state
 faultvane:{production:payment-service}:cb:window
 faultvane:{production:payment-service}:cb:probes
+faultvane:{production:payment-service}:cb:reporters
 ```
 
 Rules:
 
 - The default prefix is `faultvane`. It is configurable.
 - The namespace separates environments and groups of services. Instances that use the same namespace and name share one breaker.
-- The part in braces is a Redis Cluster hash tag. The three keys of one breaker are always in the same slot. A script can then use all three keys.
+- The part in braces is a Redis Cluster hash tag. The four keys of one breaker are always in the same slot. A script can then use all four keys.
 - The prefix, the namespace, and the name accept only the characters `a-z`, `A-Z`, `0-9`, `.`, `_`, and `-`. The maximum length of each is 64. This rule prevents collisions, because the separator `:` and the braces cannot occur in a name.
 - `cb` identifies the circuit breaker.
 
@@ -232,8 +234,8 @@ The message is the new generation as decimal text, for example `8`.
 The message is for a person who examines the channel, for example with `redis-cli`. The breaker does not read it.
 A message means only: "the state of this breaker changed, read it".
 
-The channel name is the fourth key of a script call. A script publishes only when it gets this key.
-With the option off, the adapter sends three keys, and the scripts publish nothing and work as before.
+The channel name is the fifth key of a script call. A script publishes only when it gets this key.
+With the option off, the adapter sends four keys, and the scripts publish nothing and work as before.
 The scripts publish with `redis.pcall`. When Redis refuses the message, for example because the user has no permission for the channel, the operation is still successful and no message goes out.
 
 ### `PUBLISH`, not `SPUBLISH`
@@ -277,10 +279,11 @@ The hash tag in the channel name keeps a later change to `SPUBLISH` possible, be
 | C11 Data loss is visible | A key that does not exist gives `CLOSED` with generation 0. |
 | C12 No side effects | An operation starts no goroutine and holds no lock. The adapter has no timer. With `WithNotifications`, each subscription of a breaker has one goroutine of the adapter. The request path does not use it. |
 | C13 Fingerprint | The field `fp` of the state hash. A script that accepts an event writes the fingerprint of its argument. Each reply contains the value from before the script. |
+| C14 Report identity | The reporters hash. The field is the instance number as decimal text. The value is `<bucket>:<sequence>` of the last report that the script accepted from this instance. The report script ignores a report when the bucket of the value is still in the window and the sequence of the value is equal to or higher than the sequence of the report. The first report in a new bucket removes the fields whose bucket left the window. A transition and the restore script delete the key. Each write sets the TTL of the key. A script of version 0.2.0 or older does not use this key. See [ADR 0011](../adr/0011-report-identity.md). |
 
 ## 10. TTL
 
-A script that accepts an event sets the same TTL on the three keys.
+A script that accepts an event sets the same TTL on the four keys.
 A script that ignores an event does not change the TTL.
 
 The breaker calculates the TTL from its configuration and sends it with each operation:

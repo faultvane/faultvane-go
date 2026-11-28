@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -132,6 +134,7 @@ func TestNew(t *testing.T) {
 			"faultvane:{production:payment-service}:cb:state",
 			"faultvane:{production:payment-service}:cb:window",
 			"faultvane:{production:payment-service}:cb:probes",
+			"faultvane:{production:payment-service}:cb:reporters",
 		}
 		if got := store.keys("payment-service"); fmt.Sprint(got) != fmt.Sprint(want) {
 			t.Fatalf("keys = %v, want %v", got, want)
@@ -261,6 +264,78 @@ func TestData(t *testing.T) {
 		eventually(t, "the keys expire", func() bool { return client.Exists(ctx, keys...).Val() == 0 })
 		if snapshot, err := store.Load(ctx, "a"); err != nil || snapshot.State != circuitbreaker.Closed || snapshot.Generation != 0 {
 			t.Fatalf("Load() after the expiry = %+v, %v", snapshot, err)
+		}
+	})
+
+	t.Run("KEY-1 TTL-1 FD-10 the reporters hash holds the last sequence of each instance", func(t *testing.T) {
+		store := newStore(t, client)
+		reporters := store.keys("a")[3]
+		for _, identity := range [][2]uint64{{7, 1}, {7, 2}, {7, 2}, {7, 1}, {1<<64 - 1, 1}} {
+			sent := report(0, 1, time.Hour)
+			sent.Instance, sent.Sequence = identity[0], identity[1]
+			if _, err := store.Report(ctx, "a", sent); err != nil {
+				t.Fatal(err)
+			}
+		}
+		saved := client.HGetAll(ctx, reporters).Val()
+		if len(saved) != 2 || !strings.HasSuffix(saved["7"], ":2") || !strings.HasSuffix(saved["18446744073709551615"], ":1") {
+			t.Fatalf("reporters hash = %v, want sequence 2 for instance 7 and sequence 1 for the largest instance number", saved)
+		}
+		if failures := windowTotal(t, client, store.keys("a")[1], "f"); failures != 3 {
+			t.Fatalf("shared window has %d failures, want 3", failures)
+		}
+		if ttl := client.PTTL(ctx, reporters).Val(); ttl <= 59*time.Minute || ttl > time.Hour {
+			t.Fatalf("TTL of %s = %v, want about 1h", reporters, ttl)
+		}
+	})
+
+	t.Run("FD-10 the script removes a reporter when its counts left the window", func(t *testing.T) {
+		store := newStore(t, client)
+		reporters := store.keys("a")[3]
+		for instance := uint64(7); instance <= 8; instance++ {
+			sent := report(0, 1, time.Hour)
+			sent.Instance, sent.Sequence, sent.WindowSize, sent.WindowBuckets = instance, 1, 100*time.Millisecond, 2
+			if _, err := store.Report(ctx, "a", sent); err != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(160 * time.Millisecond)
+		}
+		if saved := client.HKeys(ctx, reporters).Val(); len(saved) != 1 || saved[0] != "8" {
+			t.Fatalf("reporters = %v, want only instance 8", saved)
+		}
+	})
+
+	t.Run("FD-10 a report that is sent again after its counts left the window is added", func(t *testing.T) {
+		store := newStore(t, client)
+		sent := report(0, 1, time.Hour)
+		sent.Instance, sent.Sequence, sent.WindowSize, sent.WindowBuckets = 7, 1, 100*time.Millisecond, 2
+		for failures := int64(1); failures <= 2; failures++ {
+			sent.Calls, sent.Failures = failures, failures
+			if _, err := store.Report(ctx, "a", sent); err != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(160 * time.Millisecond)
+		}
+		if failures := windowTotal(t, client, store.keys("a")[1], "f"); failures != 2 {
+			t.Fatalf("shared window has %d failures, want the 2 failures of the second report", failures)
+		}
+	})
+
+	t.Run("FD-10 GEN-3 a transition and a restore remove the reporters", func(t *testing.T) {
+		store := newStore(t, client)
+		reporters := store.keys("a")[3]
+		sent := report(0, 1, time.Hour)
+		sent.Instance, sent.Sequence = 7, 1
+		if _, err := store.Report(ctx, "a", sent); err != nil {
+			t.Fatal(err)
+		}
+		lost := circuitbreaker.Snapshot{State: circuitbreaker.Closed, Generation: 2, TransitionAt: time.Now()}
+		if _, err := store.Restore(ctx, "a", lost); err != nil || client.Exists(ctx, reporters).Val() != 0 {
+			t.Fatalf("Restore() error = %v, reporters exist = %d, want no reporters", err, client.Exists(ctx, reporters).Val())
+		}
+		sent.Generation, sent.Failures, sent.Calls = 2, 5, 5
+		if snapshot, err := store.Report(ctx, "a", sent); err != nil || snapshot.State != circuitbreaker.Open || client.Exists(ctx, reporters).Val() != 0 {
+			t.Fatalf("Report() = %+v, %v, reporters exist = %d, want open without reporters", snapshot, err, client.Exists(ctx, reporters).Val())
 		}
 	})
 
@@ -691,4 +766,19 @@ func TestAcceptance(t *testing.T) {
 		instances[0].proxy.delay.Store(0)
 		eventually(t, "distributed mode", func() bool { return instances[0].breaker.Mode() == circuitbreaker.Distributed })
 	})
+}
+
+func windowTotal(t *testing.T, client *redis.Client, key, kind string) int64 {
+	t.Helper()
+	var total int64
+	for field, value := range client.HGetAll(context.Background(), key).Val() {
+		if strings.HasSuffix(field, ":"+kind) {
+			count, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				t.Fatal(err)
+			}
+			total += count
+		}
+	}
+	return total
 }

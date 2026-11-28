@@ -6,6 +6,18 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Circuit breaker: each report carries an identity, the new fields `Instance` and `Sequence` of `circuitbreaker.Report` (FD-10). A store adds the counts of one report to the shared window at most one time, also when the response did not arrive and the instance sends the report again. This removes the limit of version 0.2.0, in which the store added one result up to 3 times. See [ADR 0011](docs/adr/0011-report-identity.md).
+- Store contract: rule C14 (report identity), with checks in the conformance suite `circuitbreaker/storetest`. A store from a different source must implement the rule to pass the suite. Without it, the store behaves as in version 0.2.0.
+- The type `circuitbreaker.Record` has the field `Reporters`. The SQL and MongoDB adapters need no migration.
+- Redis adapter: a fourth key for each breaker, `<prefix>:{<namespace>:<name>}:cb:reporters`. Old and new versions can use the same Redis.
+
+### Changed
+
+- Circuit breaker: an instance sends a failed report again without a change, and sends no other report in that synchronization (FD-9, RC-7). In version 0.2.0, the counts of a failed report went into the next report together with the new counts. New results now wait for one more synchronization after a failed report.
+- Circuit breaker: an instance discards a failed report that is as old as the window size.
+
 ## [0.2.0] - 2026-11-25
 
 The shared rate limit and the transition notifications stay experimental.

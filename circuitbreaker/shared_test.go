@@ -395,11 +395,19 @@ func TestSharedState(t *testing.T) {
 		}
 		f.stores[0].down.Store(false)
 		f.fail(0, 1)
+		<-f.breakers[0].wake
 		before := f.stores[0].operations.Load()
 		f.sync()
 		if got := f.stores[0].operations.Load(); got != before+1 {
 			t.Fatalf("store operations = %d, want %d", got, before+1)
 		}
+		if bucket := f.stored().Buckets[0]; bucket.Calls != 3 || bucket.Failures != 3 {
+			t.Fatalf("shared window = %+v, want the 3 failures of the failed report", bucket)
+		}
+		if len(f.breakers[0].wake) != 1 {
+			t.Fatal("the synchronizer got no signal to send the new counts early")
+		}
+		f.sync()
 		if bucket := f.stored().Buckets[0]; bucket.Calls != 4 || bucket.Failures != 4 {
 			t.Fatalf("shared window = %+v, want the 3 kept failures and the 1 new failure", bucket)
 		}
@@ -445,6 +453,20 @@ func TestKeptCounts(t *testing.T) {
 		if bucket := f.stored().Buckets[0]; bucket.Calls != 1 || bucket.Failures != 0 || bucket.SlowCalls != 1 {
 			t.Fatalf("shared window = %+v, want 1 call that is slow", bucket)
 		}
+		if len(f.breakers[0].wake) != 0 {
+			t.Fatal("the synchronizer got a signal for an early report without pending counts")
+		}
+	})
+
+	t.Run("FD-7 a report that is not sent again gives no signal for an early report", func(t *testing.T) {
+		f := newFleet(t, 0)
+		store := f.addWithReportLog()
+		runTimes(t, f.breakers[0], 1, nil)
+		store.during = func() { runTimes(t, f.breakers[0], 1, nil) }
+		f.sync()
+		if len(store.reports) != 1 || len(f.breakers[0].wake) != 0 {
+			t.Fatalf("reports = %d, signals = %d, want 1 and 0", len(store.reports), len(f.breakers[0].wake))
+		}
 	})
 
 	t.Run("FD-9 DS-2 a failed synchronization without counts sends no report later", func(t *testing.T) {
@@ -482,7 +504,7 @@ func TestKeptCounts(t *testing.T) {
 	})
 
 	t.Run("FD-9 GEN-3 kept counts go with the generation of their calls and the store ignores them after a transition", func(t *testing.T) {
-		f := newFleet(t, 0)
+		f := newFleet(t, 0, WithWindowSize(5*time.Minute))
 		store := f.addWithReportLog()
 		f.add()
 		f.openAllFrom(1)
@@ -588,6 +610,26 @@ func TestKeptCounts(t *testing.T) {
 		}
 	})
 
+	t.Run("FD-9 RC-7 the reconciliation sends the kept report first and the results of local mode with the next synchronization", func(t *testing.T) {
+		f := newFleet(t, 0, WithFailureThreshold(100), WithLocalFailureThreshold(100))
+		store := f.addWithReportLog()
+		f.fail(0, 4)
+		f.disconnect(0)
+		f.fail(0, 2)
+		f.connect(0)
+		f.sync()
+		if bucket := f.stored().Buckets[0]; bucket.Failures != 4 || f.breakers[0].Mode() != Distributed {
+			t.Fatalf("shared window = %+v in %v mode, want the 4 kept failures in distributed mode", bucket, f.breakers[0].Mode())
+		}
+		f.sync()
+		if bucket := f.stored().Buckets[0]; bucket.Calls != 6 || bucket.Failures != 6 {
+			t.Fatalf("shared window = %+v, want the 4 kept failures and the 2 failures of local mode", bucket)
+		}
+		if last := store.reports[len(store.reports)-1]; last.Failures != 2 || last.Sequence != store.reports[0].Sequence+1 {
+			t.Fatalf("last report = %+v, want 2 failures with the next sequence", last)
+		}
+	})
+
 	t.Run("FD-9 RC-5 kept counts that left the local window are not sent by the reconciliation", func(t *testing.T) {
 		f := newFleet(t, 1, WithFailureThreshold(100), WithLocalFailureThreshold(100))
 		f.fail(0, 4)
@@ -601,32 +643,100 @@ func TestKeptCounts(t *testing.T) {
 		}
 	})
 
-	t.Run("FD-9 DG-1 a result counts one time for each failed report until the fault threshold starts local mode", func(t *testing.T) {
+	t.Run("FD-10 DG-1 RC-7 a result counts one time when the store applies each report without a response", func(t *testing.T) {
 		f := newFleet(t, 0, WithFailureThreshold(100), WithLocalFailureThreshold(100))
-		store := &failsReports{testStore: &testStore{Store: f.memory}, failReport: true, applyReport: true}
-		f.addWithStore(store.testStore, WithStore(store))
+		store := f.addWithLostResponses()
 		f.fail(0, 1)
 		f.sync()
 		f.sync()
-		if bucket := f.stored().Buckets[0]; bucket.Failures != 2 || f.breakers[0].Mode() != Distributed {
-			t.Fatalf("shared window = %+v in %v mode, want the 1 failure 2 times in distributed mode", bucket, f.breakers[0].Mode())
-		}
 		f.sync()
-		if bucket := f.stored().Buckets[0]; bucket.Calls != 3 || bucket.Failures != 3 || f.breakers[0].Mode() != Local {
-			t.Fatalf("shared window = %+v in %v mode, want the 1 failure 3 times in local mode", bucket, f.breakers[0].Mode())
+		if bucket := f.stored().Buckets[0]; bucket.Calls != 1 || bucket.Failures != 1 || f.breakers[0].Mode() != Local {
+			t.Fatalf("shared window = %+v in %v mode, want the 1 failure one time in local mode", bucket, f.breakers[0].Mode())
 		}
 		store.failReport = false
 		f.sync()
 		f.sync()
-		if bucket := f.stored().Buckets[0]; bucket.Calls != 4 || bucket.Failures != 4 || f.breakers[0].Mode() != Distributed {
-			t.Fatalf("shared window = %+v in %v mode, want 1 more count from the reconciliation in distributed mode", bucket, f.breakers[0].Mode())
+		if bucket := f.stored().Buckets[0]; bucket.Calls != 1 || bucket.Failures != 1 || f.breakers[0].Mode() != Distributed {
+			t.Fatalf("shared window = %+v in %v mode, want the 1 failure one time in distributed mode", bucket, f.breakers[0].Mode())
 		}
 	})
 
-	t.Run("FD-9 a report that the store applied without a response reaches a failure count threshold early", func(t *testing.T) {
+	t.Run("FD-10 a report that the store applied without a response does not reach a failure count threshold early", func(t *testing.T) {
 		f := newFleet(t, 0)
-		store := &failsReports{testStore: &testStore{Store: f.memory}, failReport: true, applyReport: true}
-		f.addWithStore(store.testStore, WithStore(store))
+		f.addWithLostResponses()
+		f.fail(0, 2)
+		f.sync()
+		f.sync()
+		f.sync()
+		f.assertStored(Closed, 0)
+	})
+
+	t.Run("FD-10 a report that the store applied without a response does not reach the minimum number of calls early", func(t *testing.T) {
+		f := newFleet(t, 0, WithFailureThreshold(100), WithFailureRateThreshold(0.25), WithMinimumCalls(8))
+		f.addWithLostResponses()
+		runTimes(t, f.breakers[0], 3, nil)
+		f.fail(0, 1)
+		f.sync()
+		f.sync()
+		if stored := f.stored(); stored.State != Closed || stored.Buckets[0].Calls != 4 || stored.Buckets[0].Failures != 1 {
+			t.Fatalf("store = %+v, want closed with 4 calls and 1 failure", stored)
+		}
+	})
+
+	t.Run("FD-10 a report that is sent again has the same instance, sequence, and counts", func(t *testing.T) {
+		f := newFleet(t, 0)
+		store := f.addWithReportLog()
+		f.fail(0, 2)
+		store.down.Store(true)
+		f.sync()
+		f.fail(0, 1)
+		f.sync()
+		store.down.Store(false)
+		f.sync()
+		f.sync()
+		if len(store.reports) != 4 || store.reports[0].Sequence == 0 {
+			t.Fatalf("reports = %+v, want 4 reports with a sequence", store.reports)
+		}
+		if store.reports[1] != store.reports[0] || store.reports[2] != store.reports[0] {
+			t.Fatalf("reports = %+v, want the first report 3 times", store.reports)
+		}
+		if last := store.reports[3]; last.Instance != store.reports[0].Instance || last.Sequence != store.reports[0].Sequence+1 || last.Failures != 1 {
+			t.Fatalf("last report = %+v, want 1 failure with the same instance and the next sequence", last)
+		}
+	})
+
+	t.Run("FD-10 two instances have different instance numbers", func(t *testing.T) {
+		f := newFleet(t, 0)
+		first, second := f.addWithReportLog(), f.addWithReportLog()
+		f.fail(0, 1)
+		f.fail(1, 1)
+		f.sync()
+		if first.reports[0].Instance == second.reports[0].Instance {
+			t.Fatalf("both instances use the instance number %d", first.reports[0].Instance)
+		}
+		if bucket := f.stored().Buckets[0]; bucket.Failures != 2 {
+			t.Fatalf("shared window = %+v, want 2 failures", bucket)
+		}
+	})
+
+	t.Run("FD-9 RC-5 a failed report that is older than the window is not sent again", func(t *testing.T) {
+		f := newFleet(t, 0)
+		store := f.addWithReportLog()
+		f.fail(0, 3)
+		store.down.Store(true)
+		f.sync()
+		store.down.Store(false)
+		f.clock.Advance(10 * time.Second)
+		f.sync()
+		if len(store.reports) != 1 || len(f.stored().Buckets) != 0 {
+			t.Fatalf("reports = %d, buckets = %d, want 1 and 0", len(store.reports), len(f.stored().Buckets))
+		}
+	})
+
+	t.Run("FD-9 a store that ignores the identity of a report adds a report that is sent again", func(t *testing.T) {
+		f := newFleet(t, 0)
+		store := f.addWithLostResponses()
+		store.withoutIdentity = true
 		f.fail(0, 2)
 		f.sync()
 		f.sync()
@@ -634,31 +744,13 @@ func TestKeptCounts(t *testing.T) {
 		f.sync()
 		f.assertStored(Open, 1)
 	})
+}
 
-	t.Run("FD-9 a failure rate does not change when the store counts a report two times", func(t *testing.T) {
-		f := newFleet(t, 0, WithFailureThreshold(100), WithFailureRateThreshold(0.5), WithMinimumCalls(4))
-		store := &failsReports{testStore: &testStore{Store: f.memory}, failReport: true, applyReport: true}
-		f.addWithStore(store.testStore, WithStore(store))
-		runTimes(t, f.breakers[0], 3, nil)
-		f.fail(0, 1)
-		f.sync()
-		f.sync()
-		if stored := f.stored(); stored.State != Closed || stored.Buckets[0].Calls != 8 || stored.Buckets[0].Failures != 2 {
-			t.Fatalf("store = %+v, want closed with 8 calls and 2 failures", stored)
-		}
-	})
-
-	t.Run("FD-9 a report that the store applied without a response reaches the minimum number of calls early", func(t *testing.T) {
-		f := newFleet(t, 0, WithFailureThreshold(100), WithFailureRateThreshold(0.25), WithMinimumCalls(8))
-		store := &failsReports{testStore: &testStore{Store: f.memory}, failReport: true, applyReport: true}
-		f.addWithStore(store.testStore, WithStore(store))
-		runTimes(t, f.breakers[0], 3, nil)
-		f.fail(0, 1)
-		f.sync()
-		f.assertStored(Closed, 0)
-		f.sync()
-		f.assertStored(Open, 1)
-	})
+func (f *fleet) addWithLostResponses() *failsReports {
+	f.t.Helper()
+	store := &failsReports{testStore: &testStore{Store: f.memory}, failReport: true, applyReport: true}
+	f.addWithStore(store.testStore, WithStore(store))
+	return store
 }
 
 func (f *fleet) openAllFrom(index int) {
