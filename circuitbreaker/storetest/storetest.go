@@ -82,8 +82,14 @@ func (r *recorder) load() circuitbreaker.Snapshot {
 }
 
 func (r *recorder) report(generation uint64, calls, failures int64) circuitbreaker.Snapshot {
+	return r.identified(0, 0, generation, calls, failures)
+}
+
+func (r *recorder) identified(instance, sequence, generation uint64, calls, failures int64) circuitbreaker.Snapshot {
 	snapshot, err := r.store.Report(context.Background(), r.name, circuitbreaker.Report{
 		Generation:    generation,
+		Instance:      instance,
+		Sequence:      sequence,
 		Calls:         calls,
 		Failures:      failures,
 		Thresholds:    circuitbreaker.Thresholds{FailureThreshold: threshold, MinimumCalls: 1 << 40, FailureRate: 1},
@@ -318,6 +324,37 @@ var checks = []check{
 		r.expectFingerprint("Restore", r.restore(lost), "a")
 		r.expectFingerprint("Load", r.load(), "a")
 	}},
+	{"C14 a report that the store applied before adds nothing", func(r *recorder) {
+		r.expect("first report", r.identified(7, 1, 0, 3, 3), circuitbreaker.Closed, 0)
+		r.expect("the same report again", r.identified(7, 1, 0, 3, 3), circuitbreaker.Closed, 0)
+		r.expect("next sequence", r.identified(7, 2, 0, 1, 1), circuitbreaker.Closed, 0)
+		r.expect("late report with a lower sequence", r.identified(7, 1, 0, 3, 3), circuitbreaker.Closed, 0)
+		r.expect("report that reaches the threshold", r.identified(7, 3, 0, 1, 1), circuitbreaker.Open, 1)
+	}},
+	{"C14 each instance has its own sequence", func(r *recorder) {
+		r.expect("first instance", r.identified(7, 1, 0, 3, 3), circuitbreaker.Closed, 0)
+		r.expect("second instance with the same sequence", r.identified(1<<63+8, 1, 0, 2, 2), circuitbreaker.Open, 1)
+	}},
+	{"C14 a report without a sequence is added each time", func(r *recorder) {
+		r.expect("report with a sequence", r.identified(0, 1, 0, 1, 1), circuitbreaker.Closed, 0)
+		r.expect("first report without a sequence", r.identified(0, 0, 0, 2, 2), circuitbreaker.Closed, 0)
+		r.expect("second report without a sequence", r.identified(0, 0, 0, 2, 2), circuitbreaker.Open, 1)
+	}},
+	{"C14 C13 a report that the store applied before does not change the fingerprint", func(r *recorder) {
+		r.as("a").identified(7, 1, 0, 1, 0)
+		r.expectFingerprint("the same report again from a different caller", r.as("b").identified(7, 1, 0, 1, 0), "a")
+		r.expectFingerprint("Load", r.load(), "a")
+	}},
+	{"C14 the sequence of an instance continues after a transition", func(r *recorder) {
+		r.openDuration = short
+		r.expect("report that opens the circuit", r.identified(7, 1, 0, threshold, threshold), circuitbreaker.Open, 1)
+		r.expect("probe", r.waitForProbe(1), circuitbreaker.HalfOpen, 2)
+		r.expect("probe result", r.complete(2, 1, circuitbreaker.Success), circuitbreaker.Closed, 3)
+		r.openDuration = long
+		r.expect("next sequence in the new generation", r.identified(7, 2, 3, threshold-1, threshold-1), circuitbreaker.Closed, 3)
+		r.expect("the same report again", r.identified(7, 2, 3, threshold-1, threshold-1), circuitbreaker.Closed, 3)
+		r.expect("report that reaches the threshold", r.identified(7, 3, 3, 1, 1), circuitbreaker.Open, 4)
+	}},
 	{"C7 two breakers share no data", func(r *recorder) {
 		other := newRecorder(r.store, r.patience)
 		r.open()
@@ -407,8 +444,8 @@ var checks = []check{
 				gotGranted, wantGranted := false, false
 				switch operation := random.IntN(4); operation {
 				case 0:
-					failures := int64(random.IntN(4))
-					got, want = tested.report(generation, failures, failures), reference.report(generation, failures, failures)
+					failures, instance, sequence := int64(random.IntN(4)), uint64(random.IntN(2)), uint64(random.IntN(4))
+					got, want = tested.identified(instance, sequence, generation, failures, failures), reference.identified(instance, sequence, generation, failures, failures)
 				case 1:
 					token++
 					got, gotGranted = tested.acquire(token)

@@ -168,6 +168,36 @@ func (unavailable) Restore(context.Context, string, circuitbreaker.Snapshot) (ci
 	return circuitbreaker.Snapshot{}, errDown
 }
 
+type ignoresTheIdentity struct{ *circuitbreaker.MemoryStore }
+
+func (s ignoresTheIdentity) Report(ctx context.Context, name string, report circuitbreaker.Report) (circuitbreaker.Snapshot, error) {
+	report.Sequence = 0
+	return s.MemoryStore.Report(ctx, name, report)
+}
+
+type sharesOneSequence struct{ *circuitbreaker.MemoryStore }
+
+func (s sharesOneSequence) Report(ctx context.Context, name string, report circuitbreaker.Report) (circuitbreaker.Snapshot, error) {
+	report.Instance = 0
+	return s.MemoryStore.Report(ctx, name, report)
+}
+
+type numbersEachReport struct{ *circuitbreaker.MemoryStore }
+
+func (s numbersEachReport) Report(ctx context.Context, name string, report circuitbreaker.Report) (circuitbreaker.Snapshot, error) {
+	report.Sequence = max(report.Sequence, 1)
+	return s.MemoryStore.Report(ctx, name, report)
+}
+
+type savesTheFingerprintOfARepeatedReport struct{ *circuitbreaker.MemoryStore }
+
+func (s savesTheFingerprintOfARepeatedReport) Report(ctx context.Context, name string, report circuitbreaker.Report) (circuitbreaker.Snapshot, error) {
+	empty := report
+	empty.Sequence, empty.Calls, empty.Failures, empty.SlowCalls = 0, 0, 0, 0
+	_, _ = s.MemoryStore.Report(ctx, name, empty)
+	return s.MemoryStore.Report(ctx, name, report)
+}
+
 func failedChecks(newStore func() circuitbreaker.Store, patience time.Duration) []string {
 	var failed []string
 	for _, c := range checks {
@@ -192,6 +222,25 @@ func TestEachFingerprintCheckRejectsABrokenStore(t *testing.T) {
 		"C13 a probe operation saves the fingerprint of the caller and returns the fingerprint before it": func() circuitbreaker.Store { return ignoresTheFingerprintOfAProbe{memory()} },
 		"C13 restore does not change the fingerprint":                                                     func() circuitbreaker.Store { return restoresEachSnapshot{memory()} },
 		"C3 the store behaves as the reference for random sequences of operations":                        func() circuitbreaker.Store { return ignoresTheFingerprintOfAProbe{memory()} },
+	}
+	for check, newStore := range broken {
+		t.Run("QA-8 DS-9 a broken store fails the check: "+check, func(t *testing.T) {
+			t.Parallel()
+			if failed := failedChecks(newStore, 150*time.Millisecond); !slices.Contains(failed, check) {
+				t.Fatalf("failed checks = %q, want %q in them", failed, check)
+			}
+		})
+	}
+}
+
+func TestEachIdentityCheckRejectsABrokenStore(t *testing.T) {
+	broken := map[string]func() circuitbreaker.Store{
+		"C14 a report that the store applied before adds nothing":                        func() circuitbreaker.Store { return ignoresTheIdentity{memory()} },
+		"C14 each instance has its own sequence":                                         func() circuitbreaker.Store { return sharesOneSequence{memory()} },
+		"C14 a report without a sequence is added each time":                             func() circuitbreaker.Store { return numbersEachReport{memory()} },
+		"C14 C13 a report that the store applied before does not change the fingerprint": func() circuitbreaker.Store { return savesTheFingerprintOfARepeatedReport{memory()} },
+		"C14 the sequence of an instance continues after a transition":                   func() circuitbreaker.Store { return ignoresTheIdentity{memory()} },
+		"C3 the store behaves as the reference for random sequences of operations":       func() circuitbreaker.Store { return ignoresTheIdentity{memory()} },
 	}
 	for check, newStore := range broken {
 		t.Run("QA-8 DS-9 a broken store fails the check: "+check, func(t *testing.T) {
