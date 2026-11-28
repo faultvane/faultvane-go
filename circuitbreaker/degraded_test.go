@@ -636,7 +636,7 @@ func TestReconciliation(t *testing.T) {
 		f.assertAll(Closed, Distributed)
 	})
 
-	t.Run("RC-7 a report that the store applied without a response counts two times", func(t *testing.T) {
+	t.Run("RC-7 FD-10 a reconciliation report that the store applied without a response counts one time", func(t *testing.T) {
 		f := newFleet(t, 0, WithFailureThreshold(100), WithLocalFailureThreshold(100))
 		store := &failsReports{testStore: &testStore{Store: f.memory}, applyReport: true}
 		f.addWithStore(store.testStore, WithStore(store))
@@ -648,19 +648,23 @@ func TestReconciliation(t *testing.T) {
 		store.failReport = false
 		f.sync()
 		f.sync()
-		if bucket := f.stored().Buckets[0]; bucket.Calls != 8 || bucket.Failures != 8 {
-			t.Fatalf("shared window = %+v, want the 4 failures two times", bucket)
+		if bucket := f.stored().Buckets[0]; bucket.Calls != 4 || bucket.Failures != 4 || f.breakers[0].Mode() != Distributed {
+			t.Fatalf("shared window = %+v in %v mode, want the 4 failures one time in distributed mode", bucket, f.breakers[0].Mode())
 		}
 	})
 }
 
 type failsReports struct {
 	*testStore
-	failReport  bool
-	applyReport bool
+	failReport      bool
+	applyReport     bool
+	withoutIdentity bool
 }
 
 func (s *failsReports) Report(ctx context.Context, name string, report Report) (Snapshot, error) {
+	if s.withoutIdentity {
+		report.Instance, report.Sequence = 0, 0
+	}
 	if s.failReport {
 		if s.applyReport {
 			_, _ = s.testStore.Report(ctx, name, report)

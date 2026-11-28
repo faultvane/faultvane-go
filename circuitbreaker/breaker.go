@@ -45,11 +45,15 @@ type Breaker struct {
 
 	responsesWithoutMismatch int
 
-	syncMu    sync.Mutex
-	wake      chan struct{}
-	stop      chan struct{}
-	done      chan struct{}
-	closeOnce sync.Once
+	syncMu        sync.Mutex
+	instance      uint64
+	sequence      uint64
+	unconfirmed   Report
+	unconfirmedAt time.Time
+	wake          chan struct{}
+	stop          chan struct{}
+	done          chan struct{}
+	closeOnce     sync.Once
 }
 
 var _ faultvane.Policy = (*Breaker)(nil)
@@ -59,7 +63,7 @@ func New(name string, opts ...Option) (*Breaker, error) {
 	if err != nil {
 		return nil, err
 	}
-	b := &Breaker{name: name, cfg: cfg, fingerprint: cfg.fingerprint(), origin: cfg.clock.Now()}
+	b := &Breaker{name: name, cfg: cfg, fingerprint: cfg.fingerprint(), origin: cfg.clock.Now(), instance: rand.Uint64()}
 	if cfg.store == nil {
 		b.current.Store(b.localView(nil))
 		return b, nil

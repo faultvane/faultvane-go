@@ -158,6 +158,8 @@ func (b *Breaker) expireLocal() {
 func (b *Breaker) report(generation uint64, c counts) Report {
 	return Report{
 		Generation:    generation,
+		Instance:      b.instance,
+		Sequence:      b.sequence,
 		Calls:         c.calls,
 		Failures:      c.failures,
 		SlowCalls:     c.slowCalls,
@@ -168,6 +170,30 @@ func (b *Breaker) report(generation uint64, c counts) Report {
 		StateTTL:      b.cfg.stateTTL,
 		Fingerprint:   b.fingerprint,
 	}
+}
+
+func (b *Breaker) sendReport(ctx context.Context, generation uint64) (Snapshot, bool, error) {
+	now := b.cfg.clock.Now()
+	if b.unconfirmed.Generation != generation || now.Sub(b.unconfirmedAt) >= b.cfg.windowSize {
+		b.unconfirmed = Report{}
+	}
+	resent := b.unconfirmed.Calls != 0
+	if !resent {
+		c := b.pending.take()
+		if c.zero() {
+			return Snapshot{}, false, nil
+		}
+		b.sequence++
+		b.unconfirmed, b.unconfirmedAt = b.report(generation, c), now
+	}
+	snapshot, err := b.cfg.store.Report(ctx, b.name, b.unconfirmed)
+	if err == nil {
+		b.unconfirmed = Report{}
+		if resent && b.pending.calls.Load() != 0 {
+			b.wakeSynchronizer()
+		}
+	}
+	return snapshot, true, err
 }
 
 func (b *Breaker) authoritative() (Snapshot, bool) {
@@ -194,12 +220,9 @@ func (b *Breaker) synchronize(ctx context.Context) {
 		b.recoverStore(ctx)
 		return
 	}
-	var snapshot Snapshot
-	var err error
-	if c := b.pending.take(); c.zero() {
+	snapshot, sent, err := b.sendReport(ctx, v.generation)
+	if !sent {
 		snapshot, err = b.cfg.store.Load(ctx, b.name)
-	} else if snapshot, err = b.cfg.store.Report(ctx, b.name, b.report(v.generation, c)); err != nil {
-		b.pending.restore(c)
 	}
 	if err == nil {
 		snapshot, err = b.restoreIfLost(ctx, snapshot)
@@ -234,13 +257,14 @@ func (b *Breaker) recoverStore(ctx context.Context) {
 	c := b.pending.take()
 	if known && lastWindow != nil && snapshot.Generation == auth.Generation && snapshot.State == Closed {
 		calls, failures, slowCalls := lastWindow.totals(b.cfg.clock.Now().Sub(b.origin))
-		c = counts{calls: min(c.calls, calls), failures: min(c.failures, failures), slowCalls: min(c.slowCalls, slowCalls)}
-		if !c.zero() {
-			if snapshot, err = b.cfg.store.Report(ctx, b.name, b.report(auth.Generation, c)); err != nil {
-				b.pending.restore(c)
-				b.counters.storeErrors.Add(1)
-				return
-			}
+		b.pending.restore(counts{calls: min(c.calls, calls), failures: min(c.failures, failures), slowCalls: min(c.slowCalls, slowCalls)})
+		reported, sent, err := b.sendReport(ctx, auth.Generation)
+		if err != nil {
+			b.counters.storeErrors.Add(1)
+			return
+		}
+		if sent {
+			snapshot = reported
 		}
 	}
 	b.mu.Lock()
