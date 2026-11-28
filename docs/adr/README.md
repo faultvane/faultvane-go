@@ -15,7 +15,8 @@ It also gives the conditions under which the team must examine the decision agai
 | [0007](0007-shared-record-for-go-adapters.md) | One exported record type for the adapters written in Go | Accepted |
 | [0008](0008-configuration-fingerprint.md) | A configuration fingerprint of the last writer in the shared state | Accepted |
 | [0009](0009-transition-notifications.md) | Optional transition notifications as a signal to synchronize | Accepted |
-| [0010](0010-resend-failed-reports.md) | A failed report is sent again with the next report | Accepted |
+| [0010](0010-resend-failed-reports.md) | A failed report is sent again with the next report | Accepted. [0011](0011-report-identity.md) replaces point 1 and removes the limit of counts that the store adds more than one time. |
+| [0011](0011-report-identity.md) | A report has an identity, and the store applies it one time | Proposed |
 
 ## Add a record
 
